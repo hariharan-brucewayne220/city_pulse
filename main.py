@@ -194,19 +194,25 @@ async def ws_live(websocket: WebSocket):
 async def _handle_agent_query(
     websocket: WebSocket, text: str, intent: str
 ) -> None:
-    """Route to ADK orchestrator and send agent_response (chart) to browser."""
+    """Route to ADK orchestrator and send agent_response (chart + story card) to browser."""
+    from agents.story_card import generate_story_card
     try:
         agent_result = await route_query(text, intent)
         spoken = agent_result.get("spoken", "")
         chart = agent_result.get("chart")
+
+        # Generate story card — intent-aware prompt, timeout handled inside
+        story_card = await generate_story_card(spoken, intent)
 
         await websocket.send_text(json.dumps({
             "type": "agent_response",
             "transcript": text,
             "spoken": spoken,
             "chart": chart,
+            "story_card": story_card,
         }))
-        log.info("agent_response sent: spoken=%s chart=%s", spoken[:80], chart is not None)
+        log.info("agent_response sent: spoken=%s chart=%s story_card=%s",
+                 spoken[:80], chart is not None, story_card is not None)
     except Exception as e:
         log.error("_handle_agent_query failed: %s", e)
         try:
@@ -215,6 +221,7 @@ async def _handle_agent_query(
                 "transcript": text,
                 "spoken": "Sorry, I had trouble querying the data.",
                 "chart": None,
+                "story_card": None,
             }))
         except Exception:
             pass

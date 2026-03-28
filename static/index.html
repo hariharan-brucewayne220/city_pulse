@@ -90,6 +90,11 @@
     to   { opacity: 1; transform: translateY(0)   scale(1);    }
   }
   .chart-slide-in { animation: chartSlideIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  @keyframes imgFadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .img-fade-in { animation: imgFadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
   .waveform-gradient {
     background: linear-gradient(90deg, #00e3fd 0%, #bdf4ff 50%, #00e3fd 100%);
     filter: blur(8px); opacity: 0.6;
@@ -163,13 +168,20 @@
 
         </div>
 
-        <!-- Stack badges -->
-        <div class="bg-surface-container-lowest px-4 py-2 border border-white/5 flex-shrink-0 flex items-center gap-2 flex-wrap">
-          <span class="text-[9px] font-mono text-zinc-600 mr-1">STACK</span>
-          <span class="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[9px] font-mono">GEMINI LIVE</span>
-          <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">ADK A2A</span>
-          <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">MCP</span>
-          <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">DUCKDB</span>
+        <!-- Image gen card (Gemini 2.5 Flash Image) -->
+        <div class="bg-surface-container-lowest border border-white/5 flex flex-col flex-shrink-0 overflow-hidden" style="height:200px;">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-white/5 flex-shrink-0">
+            <span class="text-[9px] font-mono text-zinc-600 tracking-widest">STORY_CARD · GEMINI_2.5_IMAGE</span>
+            <div id="storyCardDot" class="w-1.5 h-1.5 rounded-full bg-zinc-700"></div>
+          </div>
+          <!-- Placeholder -->
+          <div id="storyCardPlaceholder" class="flex-1 flex items-center justify-center">
+            <span class="text-[9px] font-mono text-zinc-700 tracking-widest">AWAITING_CIVIC_QUERY</span>
+          </div>
+          <!-- Image -->
+          <div id="storyCardContainer" class="flex-1 relative" style="display:none;">
+            <img id="storyCardImg" class="absolute inset-0 w-full h-full object-contain p-1" />
+          </div>
         </div>
 
       </div>
@@ -510,6 +522,7 @@
       } else if (msg.type === 'agent_response') {
         if (msg.spoken) typewrite(msg.spoken);
         if (msg.chart) renderChart(msg.chart);
+        renderStoryCard(msg.story_card);
       } else if (msg.type === 'location_detected') {
         const banner = document.getElementById('detectedBanner');
         document.getElementById('detectedPlace').textContent = msg.place.toUpperCase();
@@ -642,6 +655,26 @@
         },
       },
     });
+  }
+
+  function renderStoryCard(storyCard) {
+    const placeholder = document.getElementById('storyCardPlaceholder');
+    const container = document.getElementById('storyCardContainer');
+    const img = document.getElementById('storyCardImg');
+    const dot = document.getElementById('storyCardDot');
+    if (!storyCard || !storyCard.data) {
+      container.style.display = 'none';
+      placeholder.style.display = 'flex';
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-zinc-700';
+      return;
+    }
+    placeholder.style.display = 'none';
+    img.src = `data:${storyCard.mime_type};base64,${storyCard.data}`;
+    container.style.display = 'block';
+    img.classList.remove('img-fade-in');
+    void img.offsetWidth;
+    img.classList.add('img-fade-in');
+    dot.className = 'w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse';
   }
 
   // ── Intent classification ────────────────────────────────────────────────
