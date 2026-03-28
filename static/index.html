@@ -169,7 +169,7 @@
         </div>
 
         <!-- Image gen card (Gemini 2.5 Flash Image) -->
-        <div class="bg-surface-container-lowest border border-white/5 flex flex-col flex-shrink-0 overflow-hidden" style="height:240px;">
+        <div class="bg-surface-container-lowest border border-white/5 flex flex-col flex-shrink-0 overflow-hidden" style="height:260px;">
           <div class="flex items-center justify-between px-4 py-2 border-b border-white/5 flex-shrink-0">
             <span class="text-[9px] font-mono text-zinc-600 tracking-widest">STORY_CARD · GEMINI_2.5_IMAGE</span>
             <div id="storyCardDot" class="w-1.5 h-1.5 rounded-full bg-zinc-700"></div>
@@ -180,7 +180,7 @@
           </div>
           <!-- Image -->
           <div id="storyCardContainer" class="flex-1 relative" style="display:none;">
-            <img id="storyCardImg" class="absolute inset-0 w-full h-full object-cover" />
+            <img id="storyCardImg" class="absolute inset-0 w-full h-full object-contain" />
           </div>
         </div>
 
@@ -564,12 +564,12 @@
     source.connect(analyser);
     startViz();
 
-    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+    const processor = audioCtx.createScriptProcessor(2048, 1, 1);
     source.connect(processor);
     processor.connect(audioCtx.destination);
     const silenceData = new Uint8Array(analyser.frequencyBinCount);
     const SILENCE_THRESHOLD = 130;  // 0-255, values near 128 = silence
-    const SILENCE_HOLD_MS   = 1800;  // ms of silence before sending activity_end
+    const SILENCE_HOLD_MS   = 1200;  // ms of silence before sending activity_end
 
     processor.onaudioprocess = (e) => {
       if (ws?.readyState !== WebSocket.OPEN) return;
@@ -577,7 +577,10 @@
       const int16 = new Int16Array(pcm.length);
       for (let i = 0; i < pcm.length; i++)
         int16[i] = Math.max(-32768, Math.min(32767, pcm[i] * 32768));
-      ws.send(JSON.stringify({ type: 'audio', data: btoa(String.fromCharCode(...new Uint8Array(int16.buffer))) }));
+      const bytes = new Uint8Array(int16.buffer);
+      let b = '';
+      for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
+      ws.send(JSON.stringify({ type: 'audio', data: btoa(b) }));
 
       // Silence detection for activity_end
       analyser.getByteTimeDomainData(silenceData);
