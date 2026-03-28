@@ -34,14 +34,16 @@ MCP_PORT = int(os.environ.get("MCP_PORT", 8001))
 
 SYSTEM_INSTRUCTION = (
     "You are City Pulse, an NYC civic data intelligence agent. "
-    "You answer voice questions about NYC civic issues: AI/algorithmic tools used by city agencies, "
-    "mortgage lending access by borough, and gig delivery worker pay and conditions. "
-    "Greet ONLY once at the very start of a session with exactly: 'City Pulse ready.' "
-    "After that first greeting, NEVER repeat a greeting. Never say 'City Pulse ready' again. "
-    "If you receive empty or unclear input, stay silent — do not speak. "
-    "Keep all responses to 1-2 sentences maximum. Be specific with numbers when you have them. "
-    "Do not comment on locations, streets, or anything visual — focus purely on the civic data question being asked. "
-    "Never ask follow-up questions. Never offer a menu of topics. Just answer directly."
+    "Greet ONLY once at session start with exactly: 'City Pulse ready.' "
+    "Never repeat that greeting. "
+    "For ANY question about NYC civic topics — AI tools, algorithms, mortgage lending, "
+    "delivery workers, gig economy, housing — respond with ONLY a brief acknowledgment: "
+    "'Checking the data.' or 'Let me pull that up.' — never provide actual data yourself. "
+    "The real answer will be given to you as a message to read aloud. "
+    "When you receive a data finding as your next input, speak it naturally and conversationally "
+    "as if you are explaining it — do not say 'the data shows' or 'according to', just state the findings. "
+    "For non-civic questions answer briefly in 1 sentence. "
+    "Stay completely silent if input is unclear or empty. Never ask follow-up questions."
 )
 
 _mcp_proc: subprocess.Popen | None = None
@@ -56,7 +58,7 @@ async def lifespan(app: FastAPI):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     log.info("MCP server started (pid=%d, port=%d)", _mcp_proc.pid, MCP_PORT)
-    await asyncio.sleep(2)  # Let MCP server initialize
+    await asyncio.sleep(2)
     yield
     if _mcp_proc:
         _mcp_proc.terminate()
@@ -83,12 +85,38 @@ async def api_config():
     return {"mapsKey": os.environ.get("GOOGLE_MAPS_API_KEY", "")}
 
 
+async def _drain_turn(session, websocket: WebSocket) -> tuple[str, str]:
+    """Drain one Gemini turn, forward audio to browser. Returns (user_text, gemini_text)."""
+    transcript_buf = []
+    user_buf = []
+    async for response in session.receive():
+        if not response.server_content:
+            continue
+        sc = response.server_content
+        if sc.input_transcription and sc.input_transcription.text:
+            user_buf.append(sc.input_transcription.text)
+        if sc.output_transcription and sc.output_transcription.text:
+            transcript_buf.append(sc.output_transcription.text)
+        if sc.model_turn:
+            for p in sc.model_turn.parts:
+                if hasattr(p, "inline_data") and p.inline_data and p.inline_data.data:
+                    audio_b64 = base64.b64encode(p.inline_data.data).decode()
+                    await websocket.send_text(json.dumps({
+                        "type": "audio_output",
+                        "data": audio_b64,
+                    }))
+        if sc.turn_complete:
+            break
+    return "".join(user_buf), "".join(transcript_buf)
+
+
 @app.websocket("/ws/live")
 async def ws_live(websocket: WebSocket):
     await websocket.accept()
     log.info("WebSocket connected")
 
     location: dict = {}
+    intent_hint: str | None = None
 
     config = types.LiveConnectConfig(
         response_modalities=["AUDIO"],
@@ -100,15 +128,10 @@ async def ws_live(websocket: WebSocket):
         ),
     )
 
-    intent_hint: str | None = None
-
     try:
         async with client.aio.live.connect(model=GEMINI_MODEL, config=config) as session:
-            # State machine: collect user audio → drain Gemini response → repeat.
-            # Keeping session.receive() permanently open between turns breaks multi-turn,
-            # so we only call it after activity_end, per turn.
             while True:
-                # Phase 1: read browser messages until audio_end or text_query
+                # ── Phase 1: collect browser messages until audio_end ──────────
                 while True:
                     raw = await websocket.receive_text()
                     msg = json.loads(raw)
@@ -128,62 +151,82 @@ async def ws_live(websocket: WebSocket):
                     elif t == "intent_hint":
                         intent_hint = msg.get("hint", "general")
                     elif t == "text_query":
-                        # Direct text query bypasses voice pipeline entirely
+                        # Demo buttons bypass voice — agent runs as background task
                         text = msg.get("text", "").strip()
                         hint = msg.get("intent_hint", "general")
                         if text:
                             log.info("text_query: %r intent=%s", text[:80], hint)
-                            asyncio.create_task(_handle_agent_query(websocket, text, hint))
+                            asyncio.create_task(
+                                _handle_text_query(websocket, text, hint)
+                            )
                         continue
                     elif t == "location":
                         location["lat"] = float(msg["lat"])
                         location["lng"] = float(msg["lng"])
 
-                # Phase 2: drain Gemini response until turn_complete
-                transcript_buffer = []
-                user_transcript_buffer = []
-                async for response in session.receive():
-                    if not response.server_content:
-                        continue
-                    sc = response.server_content
-                    if sc.input_transcription and sc.input_transcription.text:
-                        user_transcript_buffer.append(sc.input_transcription.text)
-                    if sc.output_transcription and sc.output_transcription.text:
-                        transcript_buffer.append(sc.output_transcription.text)
-                    if sc.model_turn:
-                        for p in sc.model_turn.parts:
-                            if hasattr(p, "inline_data") and p.inline_data and p.inline_data.data:
-                                audio_b64 = base64.b64encode(p.inline_data.data).decode()
-                                await websocket.send_text(json.dumps({
-                                    "type": "audio_output",
-                                    "data": audio_b64,
-                                }))
-                    if sc.turn_complete:
-                        break
-
-                full_text = "".join(transcript_buffer)
-                user_text = "".join(user_transcript_buffer)
-                if full_text:
-                    log.info("Gemini said: %s", full_text[:120])
+                # ── Phase 2: drain Gemini's acknowledgment ("Checking data.") ──
+                user_text, gemini_ack = await _drain_turn(session, websocket)
+                if gemini_ack:
+                    log.info("Gemini ack: %s", gemini_ack[:80])
                 if user_text:
                     log.info("User said: %s", user_text[:120])
-                await websocket.send_text(json.dumps({"type": "transcript", "text": full_text}))
 
-                # Phase 3: classify what the USER said (not Gemini's response)
-                # This prevents Gemini's own replies from triggering spurious agent queries
-                classify_text = user_text
-                if classify_text:
-                    current_hint = intent_hint
-                    intent_hint = None  # consume hint
-                    if not current_hint or current_hint == "general":
-                        from agents.orchestrator import _classify_intent
-                        current_hint = _classify_intent(classify_text)
-                    if current_hint and current_hint != "general":
-                        # Run agent chart query in background — voice loop stays free
-                        asyncio.create_task(_handle_agent_query(websocket, classify_text, current_hint))
-                    else:
-                        # Street-level query → data cards update
-                        asyncio.create_task(_query_and_send(websocket, classify_text, location))
+                # ── Phase 3: route based on intent ────────────────────────────
+                if not user_text:
+                    continue
+
+                current_hint = intent_hint
+                intent_hint = None
+                if not current_hint or current_hint == "general":
+                    from agents.orchestrator import _classify_intent
+                    current_hint = _classify_intent(user_text)
+
+                if current_hint and current_hint != "general":
+                    # ── Civic query: agent → MCP → inject into Gemini to speak ──
+                    await websocket.send_text(json.dumps({"type": "agent_processing"}))
+                    log.info("A2A routing: intent=%s question=%r", current_hint, user_text[:80])
+
+                    try:
+                        agent_result = await route_query(user_text, current_hint)
+                        spoken = agent_result.get("spoken", "")
+                        chart = agent_result.get("chart")
+
+                        # Send chart + text to frontend immediately
+                        await websocket.send_text(json.dumps({
+                            "type": "agent_response",
+                            "transcript": user_text,
+                            "spoken": spoken,
+                            "chart": chart,
+                            "intent": current_hint,
+                        }))
+                        log.info("agent_response sent: spoken=%s chart=%s", spoken[:80], chart is not None)
+
+                        # Inject MCP spoken text into Gemini Live to narrate via voice
+                        if spoken:
+                            await session.send_client_content(
+                                turns=[types.Content(
+                                    role="user",
+                                    parts=[types.Part(text=spoken)]
+                                )],
+                                turn_complete=True,
+                            )
+                            # Drain Gemini's narration of the MCP data
+                            _, narrated = await _drain_turn(session, websocket)
+                            log.info("Gemini narrated: %s", narrated[:120])
+
+                    except Exception as e:
+                        log.error("Civic agent failed: %s", e)
+                        await websocket.send_text(json.dumps({
+                            "type": "agent_response",
+                            "transcript": user_text,
+                            "spoken": "Sorry, I had trouble querying the data.",
+                            "chart": None,
+                            "intent": current_hint,
+                        }))
+
+                else:
+                    # Street-level query → 311/crime/restaurants (background, no voice narration)
+                    asyncio.create_task(_query_and_send(websocket, user_text, location))
 
     except WebSocketDisconnect:
         log.info("Client disconnected")
@@ -195,16 +238,12 @@ async def ws_live(websocket: WebSocket):
             pass
 
 
-async def _handle_agent_query(
-    websocket: WebSocket, text: str, intent: str
-) -> None:
-    """Route to ADK orchestrator, send chart immediately, push story card when ready."""
+async def _handle_text_query(websocket: WebSocket, text: str, intent: str) -> None:
+    """Demo button queries — no voice loop, agent runs standalone."""
     try:
         agent_result = await route_query(text, intent)
         spoken = agent_result.get("spoken", "")
         chart = agent_result.get("chart")
-
-        # Send chart immediately — don't wait for image generation
         await websocket.send_text(json.dumps({
             "type": "agent_response",
             "transcript": text,
@@ -212,10 +251,9 @@ async def _handle_agent_query(
             "chart": chart,
             "intent": intent,
         }))
-        log.info("agent_response sent: spoken=%s chart=%s intent=%s", spoken[:80], chart is not None, intent)
-
+        log.info("text_query agent_response sent: spoken=%s", spoken[:80])
     except Exception as e:
-        log.error("_handle_agent_query failed: %s", e)
+        log.error("_handle_text_query failed: %s", e)
         try:
             await websocket.send_text(json.dumps({
                 "type": "agent_response",
@@ -244,11 +282,11 @@ async def _geocode(place: str) -> tuple[float, float] | None:
     return None
 
 
-async def _query_and_send(websocket: WebSocket, gemini_text: str, location: dict) -> str | None:
-    """Query NYC data, push updates to browser, return a data summary string for Gemini narration."""
+async def _query_and_send(websocket: WebSocket, gemini_text: str, location: dict) -> None:
+    """Query NYC street-level data, push data_update messages to browser."""
     place = extract_location(gemini_text)
     if place:
-        log.info("Geocoding place from Gemini: %s", place)
+        log.info("Geocoding place: %s", place)
         coords = await _geocode(place)
         if coords:
             location["lat"], location["lng"] = coords
@@ -264,14 +302,11 @@ async def _query_and_send(websocket: WebSocket, gemini_text: str, location: dict
     lng = location.get("lng")
     if lat is None or lng is None:
         log.info("No location available, skipping data query")
-        return None
-
-    results = {}
+        return
 
     async def _fetch_and_send(dataset: str, coro):
         try:
             result = await coro
-            results[dataset] = result
             await websocket.send_text(json.dumps({
                 "type": "data_update",
                 "dataset": dataset,
@@ -290,23 +325,3 @@ async def _query_and_send(websocket: WebSocket, gemini_text: str, location: dict
         _fetch_and_send("crime", query_crime(lat, lng)),
         return_exceptions=True,
     )
-
-    # Build a concise data summary for Gemini to narrate
-    parts = []
-    if "311" in results:
-        r = results["311"]
-        if r["count"] > 0:
-            parts.append(f"311 complaints: {r['count']} in the last 30 days, top issue is {r['value']}")
-        else:
-            parts.append("No 311 complaints in the last 30 days")
-    if "restaurants" in results:
-        r = results["restaurants"]
-        parts.append(f"Restaurants: {r['detail']}")
-    if "crime" in results:
-        r = results["crime"]
-        if r["count"] > 0:
-            parts.append(f"Crime: {r['count']} incidents in 30 days, most common is {r['value']}")
-        else:
-            parts.append("No crimes reported in the last 30 days")
-
-    return ". ".join(parts) if parts else None

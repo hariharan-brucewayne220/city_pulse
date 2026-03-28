@@ -346,7 +346,7 @@
 
   let restaurantList = [];
   let currentLat = null, currentLng = null;
-  let voiceTranscriptShown = false;  // tracks whether we already typewrite'd Gemini's voice response
+  let agentProcessing = false;  // mic locked while MCP agent is running
 
   // ── Google Maps ──────────────────────────────────────────────────────────
   let nycMap = null, placesService = null;
@@ -685,12 +685,13 @@
         clearTimeout(silenceTimer); silenceTimer = null;
         setStatus('speaking');
         scheduleAudio(msg.data);
+      } else if (msg.type === 'agent_processing') {
+        agentProcessing = true;
+        userWasSpeaking = false;
+        clearTimeout(silenceTimer); silenceTimer = null;
       } else if (msg.type === 'transcript') {
         if (msg.text) {
           setStatus('processing');
-          // Show Gemini's spoken response immediately — don't wait for agent
-          typewrite(msg.text);
-          voiceTranscriptShown = true;
           if (/\b(bye|goodbye|exit|stop listening|deactivate)\b/i.test(msg.text)) {
             setTimeout(() => endSession(), 1500);
           }
@@ -708,9 +709,8 @@
         currentLat = msg.lat; currentLng = msg.lng;
       } else if (msg.type === 'agent_response') {
         hideChartLoader();
-        // Only typewrite for demo button queries (text_query) — voice queries already
-        // showed Gemini's spoken response via the transcript handler above
-        if (msg.spoken && !voiceTranscriptShown) typewrite(msg.spoken);
+        agentProcessing = false;  // unlock mic — Gemini will narrate, micReopenTimer handles re-open
+        if (msg.spoken) typewrite(msg.spoken);
         if (msg.chart) renderChart(msg.chart);
         // Update map based on intent
         if (msg.intent === 'lending') {
@@ -773,15 +773,14 @@
       for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
       ws.send(JSON.stringify({ type: 'audio', data: btoa(b) }));
 
-      // Silence detection — skip entirely while Gemini is speaking to prevent echo loop
-      if (!geminiSpeaking) {
+      // Silence detection — skip while Gemini is speaking (echo) or agent is processing (MCP query)
+      if (!geminiSpeaking && !agentProcessing) {
         analyser.getByteTimeDomainData(silenceData);
         const maxAmp = silenceData.reduce((m, v) => Math.max(m, Math.abs(v - 128)), 0);
         const speaking = maxAmp > 12;  // slightly raised threshold to ignore mic noise
         if (speaking) {
           if (!userWasSpeaking) {
             ws.send(JSON.stringify({ type: 'audio_start' }));
-            voiceTranscriptShown = false;  // new turn starting
           }
           userWasSpeaking = true;
           clearTimeout(silenceTimer);
@@ -912,7 +911,6 @@
       setTimeout(() => { clearInterval(t); resolve(); }, 3000);
     });
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    voiceTranscriptShown = false;  // text query — show agent spoken text when it arrives
     ws.send(JSON.stringify({ type: 'text_query', text, intent_hint: intent }));
     showChartLoader();
     typewrite('Querying: ' + text);
