@@ -85,6 +85,11 @@
   @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
   @keyframes cardFlash { 0% { opacity: 1; } 30% { opacity: 0.3; } 60% { opacity: 1; } 80% { opacity: 0.6; } 100% { opacity: 1; } }
   .card-flash { animation: cardFlash 0.6s ease-out; }
+  @keyframes chartSlideIn {
+    from { opacity: 0; transform: translateY(24px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0)   scale(1);    }
+  }
+  .chart-slide-in { animation: chartSlideIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
   .waveform-gradient {
     background: linear-gradient(90deg, #00e3fd 0%, #bdf4ff 50%, #00e3fd 100%);
     filter: blur(8px); opacity: 0.6;
@@ -119,64 +124,53 @@
     <!-- Top row: camera (left) + mic + transcript (right) -->
     <div class="flex gap-3 flex-1 min-h-0">
 
-      <!-- Left: dataset info + agent status -->
+      <!-- Left: chart display -->
       <div class="flex flex-col gap-3 w-[55%] min-h-0">
 
-        <!-- Dataset cards -->
-        <section class="grid grid-cols-1 gap-2 flex-1 min-h-0 overflow-y-auto">
+        <!-- Chart panel — placeholder until agent responds -->
+        <div class="bg-surface-container-lowest border border-white/5 flex flex-col flex-1 min-h-0 relative overflow-hidden">
 
-          <!-- AlgorithmAgent -->
-          <div class="bg-surface-container-low p-4 border-t-2 border-amber-500">
-            <div class="flex justify-between items-start mb-2">
-              <span class="text-[9px] text-zinc-500 font-mono uppercase tracking-tighter">AGENT_01 · ALGORITHM</span>
-              <span class="text-[9px] font-mono text-amber-500">132 RECORDS</span>
+          <!-- Placeholder -->
+          <div id="chartPlaceholder" class="flex flex-col items-center justify-center flex-1 gap-5 p-8">
+            <div class="text-[9px] font-mono text-zinc-600 tracking-widest">AWAITING_CIVIC_QUERY</div>
+            <div class="flex flex-col gap-2 w-full max-w-sm">
+              <div class="border border-amber-500/20 px-4 py-3 flex items-center gap-3">
+                <div class="w-1.5 h-1.5 rounded-full bg-amber-500/50 flex-shrink-0"></div>
+                <span class="text-[10px] font-mono text-zinc-500">AGENT_01 · NYC ALGORITHMIC TOOLS</span>
+              </div>
+              <div class="border border-sky-500/20 px-4 py-3 flex items-center gap-3">
+                <div class="w-1.5 h-1.5 rounded-full bg-sky-500/50 flex-shrink-0"></div>
+                <span class="text-[10px] font-mono text-zinc-500">AGENT_02 · HMDA MORTGAGE LENDING</span>
+              </div>
+              <div class="border border-emerald-500/20 px-4 py-3 flex items-center gap-3">
+                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500/50 flex-shrink-0"></div>
+                <span class="text-[10px] font-mono text-zinc-500">AGENT_03 · DELIVERY WORKER PAY</span>
+              </div>
             </div>
-            <h3 class="font-headline text-base text-on-surface font-bold mb-1">NYC Algorithmic Tools</h3>
-            <p class="text-[10px] text-zinc-400 font-mono leading-tight">NYC agency AI &amp; automated decision systems — real data from NYC Open Data</p>
-            <div class="mt-2 text-[9px] font-mono text-zinc-600">
-              agencies · tool_name · purpose_type · vendor
+            <div class="text-[9px] font-mono text-zinc-700 tracking-widest">ASK CITY PULSE A CIVIC QUESTION</div>
+          </div>
+
+          <!-- Chart (hidden until data arrives, slides in) -->
+          <div id="chartContainer" class="flex flex-col px-5 py-4 flex-1" style="display:none;">
+            <div class="flex items-center justify-between mb-3 flex-shrink-0">
+              <span id="chartAgentLabel" class="text-[9px] font-mono text-zinc-500 tracking-widest">CHART_OUTPUT</span>
+              <div class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+            </div>
+            <div class="flex-1 min-h-0 relative">
+              <canvas id="pulseChart"></canvas>
             </div>
           </div>
 
-          <!-- LendingAgent -->
-          <div class="bg-surface-container-low p-4 border-t-2 border-sky-500">
-            <div class="flex justify-between items-start mb-2">
-              <span class="text-[9px] text-zinc-500 font-mono uppercase tracking-tighter">AGENT_02 · LENDING</span>
-              <span class="text-[9px] font-mono text-sky-400">600 RECORDS</span>
-            </div>
-            <h3 class="font-headline text-base text-on-surface font-bold mb-1">HMDA Mortgage Data</h3>
-            <p class="text-[10px] text-zinc-400 font-mono leading-tight">NYC home loan applications with race, borough, approval/denial outcomes</p>
-            <div class="mt-2 text-[9px] font-mono text-zinc-600">
-              applicant_race · borough · action_taken · loan_amount
-            </div>
-          </div>
+        </div>
 
-          <!-- GigAgent -->
-          <div class="bg-surface-container-low p-4 border-t-2 border-emerald-500">
-            <div class="flex justify-between items-start mb-2">
-              <span class="text-[9px] text-zinc-500 font-mono uppercase tracking-tighter">AGENT_03 · GIG</span>
-              <span class="text-[9px] font-mono text-emerald-400">300 RECORDS</span>
-            </div>
-            <h3 class="font-headline text-base text-on-surface font-bold mb-1">Delivery Worker Study</h3>
-            <p class="text-[10px] text-zinc-400 font-mono leading-tight">DCWP delivery worker earnings, expenses, and working conditions by platform</p>
-            <div class="mt-2 text-[9px] font-mono text-zinc-600">
-              platform · gross_hourly · net_hourly · expenses
-            </div>
-          </div>
-
-          <!-- Architecture badge -->
-          <div class="bg-surface-container-lowest p-3 border border-white/5">
-            <div class="text-[9px] font-mono text-zinc-600 mb-2 tracking-widest">ARCHITECTURE</div>
-            <div class="flex flex-wrap gap-2">
-              <span class="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[9px] font-mono">GEMINI LIVE</span>
-              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">ADK AGENTS</span>
-              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">MCP SERVER</span>
-              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">DUCKDB</span>
-              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">A2A PROTOCOL</span>
-            </div>
-          </div>
-
-        </section>
+        <!-- Stack badges -->
+        <div class="bg-surface-container-lowest px-4 py-2 border border-white/5 flex-shrink-0 flex items-center gap-2 flex-wrap">
+          <span class="text-[9px] font-mono text-zinc-600 mr-1">STACK</span>
+          <span class="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[9px] font-mono">GEMINI LIVE</span>
+          <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">ADK A2A</span>
+          <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">MCP</span>
+          <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">DUCKDB</span>
+        </div>
 
       </div>
 
@@ -215,11 +209,6 @@
         <div id="waveformCard" class="bg-surface-container-lowest border border-white/5 px-4 py-2 flex-shrink-0 flex items-center gap-3" style="display:none!important">
           <span class="text-[9px] font-mono text-zinc-600 tracking-widest flex-shrink-0">MIC_INPUT</span>
           <canvas id="vizCanvas" width="300" height="32" class="flex-1"></canvas>
-        </div>
-
-        <!-- Chart Panel (hidden until agent response) -->
-        <div id="chartContainer" class="bg-surface-container-lowest border border-white/5 px-4 py-3 flex-shrink-0" style="display:none; max-height:260px;">
-          <canvas id="pulseChart" height="220"></canvas>
         </div>
 
         <!-- Demo Query Buttons -->
@@ -609,12 +598,20 @@
   let pulseChartInstance = null;
 
   function renderChart(chartData) {
+    const placeholder = document.getElementById('chartPlaceholder');
     const container = document.getElementById('chartContainer');
     if (!chartData || !chartData.labels || !chartData.datasets) {
       container.style.display = 'none';
+      placeholder.style.display = 'flex';
       return;
     }
-    container.style.display = 'block';
+    // Hide placeholder, slide in chart
+    placeholder.style.display = 'none';
+    container.style.display = 'flex';
+    container.classList.remove('chart-slide-in');
+    void container.offsetWidth; // force reflow to restart animation
+    container.classList.add('chart-slide-in');
+
     const ctx = document.getElementById('pulseChart').getContext('2d');
     if (pulseChartInstance) pulseChartInstance.destroy();
 
