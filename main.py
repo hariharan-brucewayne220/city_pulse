@@ -34,16 +34,12 @@ MCP_PORT = int(os.environ.get("MCP_PORT", 8001))
 
 SYSTEM_INSTRUCTION = (
     "You are City Pulse, an NYC civic data intelligence agent. "
+    "You answer voice questions about NYC civic issues: AI/algorithmic tools used by city agencies, "
+    "mortgage lending access by borough, and gig delivery worker pay. "
     "Greet ONLY once at session start with exactly: 'City Pulse ready.' "
-    "Never repeat that greeting. "
-    "For ANY question about NYC civic topics — AI tools, algorithms, mortgage lending, "
-    "delivery workers, gig economy, housing — respond with ONLY a brief acknowledgment: "
-    "'Checking the data.' or 'Let me pull that up.' — never provide actual data yourself. "
-    "The real answer will be given to you as a message to read aloud. "
-    "When you receive a data finding as your next input, speak it naturally and conversationally "
-    "as if you are explaining it — do not say 'the data shows' or 'according to', just state the findings. "
-    "For non-civic questions answer briefly in 1 sentence. "
-    "Stay completely silent if input is unclear or empty. Never ask follow-up questions."
+    "Never repeat that greeting. Stay silent on empty or unclear input. "
+    "Keep all answers to 1-2 sentences. Be specific with numbers when you have them. "
+    "Never ask follow-up questions. Never offer a menu of topics. Just answer directly."
 )
 
 _mcp_proc: subprocess.Popen | None = None
@@ -157,7 +153,7 @@ async def ws_live(websocket: WebSocket):
                         if text:
                             log.info("text_query: %r intent=%s", text[:80], hint)
                             asyncio.create_task(
-                                _handle_text_query(websocket, text, hint)
+                                _handle_civic_query(websocket, text, hint)
                             )
                         continue
                     elif t == "location":
@@ -182,50 +178,11 @@ async def ws_live(websocket: WebSocket):
                     current_hint = _classify_intent(user_text)
 
                 if current_hint and current_hint != "general":
-                    # ── Civic query: agent → MCP → inject into Gemini to speak ──
-                    await websocket.send_text(json.dumps({"type": "agent_processing"}))
+                    # Civic query — agent runs in background, sends chart + text when ready
                     log.info("A2A routing: intent=%s question=%r", current_hint, user_text[:80])
-
-                    try:
-                        agent_result = await route_query(user_text, current_hint)
-                        spoken = agent_result.get("spoken", "")
-                        chart = agent_result.get("chart")
-
-                        # Send chart + text to frontend immediately
-                        await websocket.send_text(json.dumps({
-                            "type": "agent_response",
-                            "transcript": user_text,
-                            "spoken": spoken,
-                            "chart": chart,
-                            "intent": current_hint,
-                        }))
-                        log.info("agent_response sent: spoken=%s chart=%s", spoken[:80], chart is not None)
-
-                        # Inject MCP spoken text into Gemini Live to narrate via voice
-                        if spoken:
-                            await session.send_client_content(
-                                turns=[types.Content(
-                                    role="user",
-                                    parts=[types.Part(text=spoken)]
-                                )],
-                                turn_complete=True,
-                            )
-                            # Drain Gemini's narration of the MCP data
-                            _, narrated = await _drain_turn(session, websocket)
-                            log.info("Gemini narrated: %s", narrated[:120])
-
-                    except Exception as e:
-                        log.error("Civic agent failed: %s", e)
-                        await websocket.send_text(json.dumps({
-                            "type": "agent_response",
-                            "transcript": user_text,
-                            "spoken": "Sorry, I had trouble querying the data.",
-                            "chart": None,
-                            "intent": current_hint,
-                        }))
-
+                    asyncio.create_task(_handle_civic_query(websocket, user_text, current_hint))
                 else:
-                    # Street-level query → 311/crime/restaurants (background, no voice narration)
+                    # Street-level query → 311/crime/restaurants
                     asyncio.create_task(_query_and_send(websocket, user_text, location))
 
     except WebSocketDisconnect:
@@ -238,8 +195,8 @@ async def ws_live(websocket: WebSocket):
             pass
 
 
-async def _handle_text_query(websocket: WebSocket, text: str, intent: str) -> None:
-    """Demo button queries — no voice loop, agent runs standalone."""
+async def _handle_civic_query(websocket: WebSocket, text: str, intent: str) -> None:
+    """Run ADK agent → MCP → send chart + spoken text to frontend."""
     try:
         agent_result = await route_query(text, intent)
         spoken = agent_result.get("spoken", "")
@@ -251,15 +208,16 @@ async def _handle_text_query(websocket: WebSocket, text: str, intent: str) -> No
             "chart": chart,
             "intent": intent,
         }))
-        log.info("text_query agent_response sent: spoken=%s", spoken[:80])
+        log.info("agent_response sent: spoken=%s chart=%s intent=%s", spoken[:80], chart is not None, intent)
     except Exception as e:
-        log.error("_handle_text_query failed: %s", e)
+        log.error("_handle_civic_query failed: %s", e)
         try:
             await websocket.send_text(json.dumps({
                 "type": "agent_response",
                 "transcript": text,
                 "spoken": "Sorry, I had trouble querying the data.",
                 "chart": None,
+                "intent": intent,
             }))
         except Exception:
             pass

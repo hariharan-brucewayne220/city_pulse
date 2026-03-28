@@ -346,7 +346,6 @@
 
   let restaurantList = [];
   let currentLat = null, currentLng = null;
-  let agentProcessing = false;  // mic locked while MCP agent is running
 
   // ── Google Maps ──────────────────────────────────────────────────────────
   let nycMap = null, placesService = null;
@@ -685,10 +684,6 @@
         clearTimeout(silenceTimer); silenceTimer = null;
         setStatus('speaking');
         scheduleAudio(msg.data);
-      } else if (msg.type === 'agent_processing') {
-        agentProcessing = true;
-        userWasSpeaking = false;
-        clearTimeout(silenceTimer); silenceTimer = null;
       } else if (msg.type === 'transcript') {
         if (msg.text) {
           setStatus('processing');
@@ -709,7 +704,6 @@
         currentLat = msg.lat; currentLng = msg.lng;
       } else if (msg.type === 'agent_response') {
         hideChartLoader();
-        agentProcessing = false;  // unlock mic — Gemini will narrate, micReopenTimer handles re-open
         if (msg.spoken) typewrite(msg.spoken);
         if (msg.chart) renderChart(msg.chart);
         // Update map based on intent
@@ -773,8 +767,8 @@
       for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
       ws.send(JSON.stringify({ type: 'audio', data: btoa(b) }));
 
-      // Silence detection — skip while Gemini is speaking (echo) or agent is processing (MCP query)
-      if (!geminiSpeaking && !agentProcessing) {
+      // Silence detection — skip while Gemini is speaking to prevent echo loop
+      if (!geminiSpeaking) {
         analyser.getByteTimeDomainData(silenceData);
         const maxAmp = silenceData.reduce((m, v) => Math.max(m, Math.abs(v - 128)), 0);
         const speaking = maxAmp > 12;  // slightly raised threshold to ignore mic noise
