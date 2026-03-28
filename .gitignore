@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.log
+
+# Test scripts
+test_*.py
+ISSUES.md
+CONTEXT.md
+
+# Data files are committed (used by MCP server at runtime)

@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>City Pulse | NYC Civic Intelligence</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#ffc880",
+          "secondary-container": "#00e3fd",
+          "on-primary-fixed": "#291800",
+          "on-secondary-container": "#00616d",
+          "on-background": "#e5e2e3",
+          "on-error": "#690005",
+          "surface-container-highest": "#353436",
+          "on-tertiary-container": "#644000",
+          "secondary-fixed": "#9cf0ff",
+          "background": "#131314",
+          "surface-container": "#201f20",
+          "tertiary": "#ffc880",
+          "on-error-container": "#ffdad6",
+          "surface-container-lowest": "#0e0e0f",
+          "on-primary": "#452b00",
+          "on-secondary": "#00363d",
+          "tertiary-fixed": "#ffddb4",
+          "on-primary-fixed-variant": "#633f00",
+          "primary-fixed": "#ffddb4",
+          "surface-dim": "#131314",
+          "inverse-surface": "#e5e2e3",
+          "primary-fixed-dim": "#ffb955",
+          "outline": "#9f8e7a",
+          "surface-tint": "#ffb955",
+          "primary-container": "#f5a623",
+          "secondary": "#bdf4ff",
+          "surface-container-low": "#1c1b1c",
+          "on-secondary-fixed-variant": "#004f58",
+          "tertiary-fixed-dim": "#ffb955",
+          "surface-variant": "#353436",
+          "on-tertiary": "#452b00",
+          "surface-container-high": "#2a2a2b",
+          "error": "#ffb4ab",
+          "on-surface-variant": "#d7c3ae",
+          "tertiary-container": "#f5a623",
+          "inverse-on-surface": "#313031",
+          "outline-variant": "#524534",
+          "on-surface": "#e5e2e3",
+          "surface": "#131314",
+          "on-primary-container": "#644000",
+          "surface-bright": "#3a393a",
+          "inverse-primary": "#835500",
+          "secondary-fixed-dim": "#00daf3",
+          "on-secondary-fixed": "#001f24",
+          "error-container": "#93000a",
+          "on-tertiary-fixed": "#291800",
+          "on-tertiary-fixed-variant": "#633f00"
+        },
+        fontFamily: {
+          "headline": ["Space Grotesk"],
+          "body": ["Roboto Mono"],
+          "label": ["Space Grotesk"]
+        },
+        borderRadius: { "DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px" },
+      },
+    },
+  }
+</script>
+<style>
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  .hud-corner { border-color: #f5a623; width: 32px; height: 32px; }
+  .typewriter-cursor {
+    display: inline-block; width: 2px; height: 1em;
+    background: #f5a623; margin-left: 2px; vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes cardFlash { 0% { opacity: 1; } 30% { opacity: 0.3; } 60% { opacity: 1; } 80% { opacity: 0.6; } 100% { opacity: 1; } }
+  .card-flash { animation: cardFlash 0.6s ease-out; }
+  .waveform-gradient {
+    background: linear-gradient(90deg, #00e3fd 0%, #bdf4ff 50%, #00e3fd 100%);
+    filter: blur(8px); opacity: 0.6;
+  }
+  .scanline {
+    background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%),
+                linear-gradient(90deg, rgba(255,0,0,0.06), rgba(0,255,0,0.02), rgba(0,0,255,0.06));
+    background-size: 100% 2px, 3px 100%;
+  }
+</style>
+</head>
+<body class="bg-[#0A0A0B] text-on-background font-body selection:bg-primary-container selection:text-on-primary-container">
+
+<!-- Header -->
+<header class="bg-[#0A0A0B] flex justify-between items-center w-full px-6 py-4 fixed top-0 z-50 border-b border-white/5">
+  <div class="text-xl font-bold font-mono text-amber-500 tracking-tighter">CITY_PULSE</div>
+  <div class="flex items-center space-x-3">
+    <div id="statusDot" class="w-2 h-2 rounded-full bg-zinc-600"></div>
+    <span id="statusText" class="text-zinc-500 font-mono text-xs tracking-widest uppercase">ready</span>
+  </div>
+  <div class="flex items-center space-x-6">
+    <span class="material-symbols-outlined text-amber-500">sensors</span>
+    <span class="material-symbols-outlined text-amber-500">memory</span>
+    <span class="material-symbols-outlined text-amber-500">terminal</span>
+  </div>
+</header>
+
+<!-- Main — single-viewport grid, no scroll needed -->
+<main class="pt-16 pb-12 h-screen flex flex-col px-4 overflow-hidden">
+  <div class="flex flex-col gap-3 max-w-7xl mx-auto w-full flex-1 min-h-0">
+
+    <!-- Top row: camera (left) + mic + transcript (right) -->
+    <div class="flex gap-3 flex-1 min-h-0">
+
+      <!-- Left: dataset info + agent status -->
+      <div class="flex flex-col gap-3 w-[55%] min-h-0">
+
+        <!-- Dataset cards -->
+        <section class="grid grid-cols-1 gap-2 flex-1 min-h-0 overflow-y-auto">
+
+          <!-- AlgorithmAgent -->
+          <div class="bg-surface-container-low p-4 border-t-2 border-amber-500">
+            <div class="flex justify-between items-start mb-2">
+              <span class="text-[9px] text-zinc-500 font-mono uppercase tracking-tighter">AGENT_01 · ALGORITHM</span>
+              <span class="text-[9px] font-mono text-amber-500">132 RECORDS</span>
+            </div>
+            <h3 class="font-headline text-base text-on-surface font-bold mb-1">NYC Algorithmic Tools</h3>
+            <p class="text-[10px] text-zinc-400 font-mono leading-tight">NYC agency AI &amp; automated decision systems — real data from NYC Open Data</p>
+            <div class="mt-2 text-[9px] font-mono text-zinc-600">
+              agencies · tool_name · purpose_type · vendor
+            </div>
+          </div>
+
+          <!-- LendingAgent -->
+          <div class="bg-surface-container-low p-4 border-t-2 border-sky-500">
+            <div class="flex justify-between items-start mb-2">
+              <span class="text-[9px] text-zinc-500 font-mono uppercase tracking-tighter">AGENT_02 · LENDING</span>
+              <span class="text-[9px] font-mono text-sky-400">600 RECORDS</span>
+            </div>
+            <h3 class="font-headline text-base text-on-surface font-bold mb-1">HMDA Mortgage Data</h3>
+            <p class="text-[10px] text-zinc-400 font-mono leading-tight">NYC home loan applications with race, borough, approval/denial outcomes</p>
+            <div class="mt-2 text-[9px] font-mono text-zinc-600">
+              applicant_race · borough · action_taken · loan_amount
+            </div>
+          </div>
+
+          <!-- GigAgent -->
+          <div class="bg-surface-container-low p-4 border-t-2 border-emerald-500">
+            <div class="flex justify-between items-start mb-2">
+              <span class="text-[9px] text-zinc-500 font-mono uppercase tracking-tighter">AGENT_03 · GIG</span>
+              <span class="text-[9px] font-mono text-emerald-400">300 RECORDS</span>
+            </div>
+            <h3 class="font-headline text-base text-on-surface font-bold mb-1">Delivery Worker Study</h3>
+            <p class="text-[10px] text-zinc-400 font-mono leading-tight">DCWP delivery worker earnings, expenses, and working conditions by platform</p>
+            <div class="mt-2 text-[9px] font-mono text-zinc-600">
+              platform · gross_hourly · net_hourly · expenses
+            </div>
+          </div>
+
+          <!-- Architecture badge -->
+          <div class="bg-surface-container-lowest p-3 border border-white/5">
+            <div class="text-[9px] font-mono text-zinc-600 mb-2 tracking-widest">ARCHITECTURE</div>
+            <div class="flex flex-wrap gap-2">
+              <span class="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[9px] font-mono">GEMINI LIVE</span>
+              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">ADK AGENTS</span>
+              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">MCP SERVER</span>
+              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">DUCKDB</span>
+              <span class="px-2 py-0.5 bg-zinc-800 border border-white/10 text-zinc-400 text-[9px] font-mono">A2A PROTOCOL</span>
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+
+      <!-- Right: mic hub + transcript (always visible) -->
+      <div class="flex flex-col gap-3 w-[45%] min-h-0">
+
+        <!-- Voice Hub -->
+        <div class="bg-surface-container-lowest flex flex-col items-center justify-center relative overflow-hidden border border-white/5 py-6 flex-shrink-0">
+          <div id="waveform" class="absolute bottom-0 left-0 right-0 h-10 waveform-gradient flex items-center justify-around px-4 opacity-0 transition-opacity duration-300">
+            <div class="w-1 bg-secondary-container h-6 animate-pulse"></div>
+            <div class="w-1 bg-secondary-container h-9 animate-pulse delay-75"></div>
+            <div class="w-1 bg-secondary-container h-5 animate-pulse delay-150"></div>
+            <div class="w-1 bg-secondary-container h-8 animate-pulse delay-100"></div>
+            <div class="w-1 bg-secondary-container h-4 animate-pulse delay-300"></div>
+            <div class="w-1 bg-secondary-container h-10 animate-pulse delay-200"></div>
+          </div>
+          <div class="relative z-10 flex items-center gap-8">
+            <button id="micBtn" onclick="toggleSession()"
+              class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant hover:shadow-[0_0_30px_rgba(245,166,35,0.3)] hover:border-amber-500 hover:scale-105 transition-all duration-200">
+              <span class="material-symbols-outlined text-3xl text-amber-500" style="font-variation-settings:'FILL' 1;">mic</span>
+            </button>
+            <div class="flex flex-col gap-2">
+              <button id="cameraBtn" onclick="toggleCamera()"
+                class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-zinc-500 hover:text-amber-500 hover:border-amber-500 transition-colors">
+                <span class="material-symbols-outlined text-xl">videocam</span>
+              </button>
+              <button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-zinc-500 hover:text-amber-500 hover:border-amber-500 transition-colors">
+                <span class="material-symbols-outlined text-xl">settings</span>
+              </button>
+            </div>
+          </div>
+          <span id="sessionLabel" class="text-[9px] font-mono text-zinc-600 tracking-[0.2em] relative z-10 mt-4">GEMINI_LIVE_STANDBY</span>
+        </div>
+
+        <!-- Waveform card -->
+        <div id="waveformCard" class="bg-surface-container-lowest border border-white/5 px-4 py-2 flex-shrink-0 flex items-center gap-3" style="display:none!important">
+          <span class="text-[9px] font-mono text-zinc-600 tracking-widest flex-shrink-0">MIC_INPUT</span>
+          <canvas id="vizCanvas" width="300" height="32" class="flex-1"></canvas>
+        </div>
+
+        <!-- Chart Panel (hidden until agent response) -->
+        <div id="chartContainer" class="bg-surface-container-lowest border border-white/5 px-4 py-3 flex-shrink-0" style="display:none; max-height:260px;">
+          <canvas id="pulseChart" height="220"></canvas>
+        </div>
+
+        <!-- Demo Query Buttons -->
+        <div class="flex gap-2 flex-wrap flex-shrink-0">
+          <button onclick="fireDemo('Which NYC agencies use AI to make decisions about people?','algorithm')"
+            class="text-[9px] font-mono border border-white/10 px-2 py-1 text-zinc-500 hover:text-amber-500 hover:border-amber-500 transition-colors">
+            AI TOOLS
+          </button>
+          <button onclick="fireDemo('Is there racial bias in mortgage approvals in the Bronx?','lending')"
+            class="text-[9px] font-mono border border-white/10 px-2 py-1 text-zinc-500 hover:text-amber-500 hover:border-amber-500 transition-colors">
+            LENDING BIAS
+          </button>
+          <button onclick="fireDemo('How much do delivery workers earn after expenses?','gig')"
+            class="text-[9px] font-mono border border-white/10 px-2 py-1 text-zinc-500 hover:text-amber-500 hover:border-amber-500 transition-colors">
+            GIG WORKERS
+          </button>
+        </div>
+
+
+        <!-- Response Panel (fills remaining height) -->
+        <div class="bg-surface-container-high p-5 flex flex-col flex-1 min-h-0">
+          <div class="flex items-center justify-between mb-4 flex-shrink-0">
+            <div class="flex items-center space-x-3">
+              <span class="text-amber-500 font-headline font-black text-xs tracking-widest">CITY_PULSE_OUTPUT</span>
+              <div id="streamingBadge" class="px-2 py-0.5 bg-zinc-800 text-[9px] text-zinc-500 font-mono">STANDBY</div>
+            </div>
+            <span class="material-symbols-outlined text-zinc-600 text-base">more_horiz</span>
+          </div>
+          <div id="responseText" class="flex-1 font-body text-sm leading-relaxed text-zinc-400 overflow-y-auto">
+            <span class="text-amber-500 mr-2">&gt;</span>
+            <span class="text-zinc-600">Ask about NYC civic data — or point your camera at any location...</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- Footer -->
+<footer class="fixed bottom-0 left-0 right-0 flex justify-between items-center px-8 py-2 z-50 bg-[#0E0E0F] border-t border-white/5">
+  <div class="flex items-center space-x-6">
+    <span class="font-mono text-[10px] uppercase tracking-widest text-zinc-500">NYU Tandon 2026</span>
+    <div class="h-3 w-[1px] bg-zinc-800"></div>
+    <div class="flex space-x-4">
+      <span class="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Gemini Live</span>
+      <span class="text-zinc-700 text-[10px]">×</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest text-zinc-500">NYC Open Data</span>
+    </div>
+  </div>
+  <div class="flex items-center space-x-6">
+    <div class="flex items-center space-x-2">
+      <div class="w-1 h-1 rounded-full bg-emerald-500"></div>
+      <span class="font-mono text-[10px] text-zinc-500">GEMINI_LIVE_API</span>
+    </div>
+    <div class="flex items-center space-x-2">
+      <div class="w-1 h-1 rounded-full bg-emerald-500"></div>
+      <span class="font-mono text-[10px] text-zinc-500">NYC_OPEN_DATA</span>
+    </div>
+  </div>
+</footer>
+
+<!-- 311 Breakdown Modal -->
+<div id="modal311" class="hidden fixed inset-0 z-[100] flex items-center justify-center" onclick="toggle311Panel()">
+  <div class="absolute inset-0 bg-black/70"></div>
+  <div class="relative bg-zinc-900 border border-amber-500/40 w-80 max-h-[70vh] flex flex-col" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <span class="font-mono text-xs text-amber-500 tracking-widest">311_COMPLAINTS // BREAKDOWN</span>
+      <button onclick="toggle311Panel()" class="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+    </div>
+    <div id="card311Breakdown" class="overflow-y-auto flex-1 p-3 space-y-1"></div>
+  </div>
+</div>
+
+<!-- Restaurant Modal -->
+<div id="modalRestaurants" class="hidden fixed inset-0 z-[100] flex items-center justify-center" onclick="toggleRestaurantPanel()">
+  <div class="absolute inset-0 bg-black/70"></div>
+  <div class="relative bg-zinc-900 border border-sky-500/40 w-96 max-h-[75vh] flex flex-col" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <span class="font-mono text-xs text-sky-400 tracking-widest">RESTAURANTS // NEARBY</span>
+      <button onclick="toggleRestaurantPanel()" class="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+    </div>
+    <div id="restaurantCards" class="overflow-y-auto flex-1 p-3 space-y-2"></div>
+  </div>
+</div>
+
+<!-- Crime Breakdown Modal -->
+<div id="modalCrime" class="hidden fixed inset-0 z-[100] flex items-center justify-center" onclick="toggleCrimePanel()">
+  <div class="absolute inset-0 bg-black/70"></div>
+  <div class="relative bg-zinc-900 border border-red-500/40 w-80 max-h-[70vh] flex flex-col" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <span class="font-mono text-xs text-red-400 tracking-widest">NYPD_CRIME_LOG // BREAKDOWN</span>
+      <button onclick="toggleCrimePanel()" class="text-zinc-500 hover:text-white text-lg leading-none">×</button>
+    </div>
+    <div id="cardCrimeBreakdown" class="overflow-y-auto flex-1 p-3 space-y-1"></div>
+  </div>
+</div>
+
+<script>
+  let ws = null, mediaStream = null, audioCtx = null, frameInterval = null;
+  let sessionActive = false, cameraActive = false;
+  let analyser = null, vizRaf = null;
+  let geminiSpeaking = false;
+  let silenceTimer = null, userWasSpeaking = false;
+  let playCtx = null, playNextTime = 0, micReopenTimer = null;
+  let pendingChart = null;  // chart held until narration finishes
+
+  let restaurantList = [];
+
+  const statusDot    = document.getElementById('statusDot');
+  const statusText   = document.getElementById('statusText');
+  const liveDot      = document.getElementById('liveDot');
+  const liveLabel    = document.getElementById('liveLabel');
+  const responseText = document.getElementById('responseText');
+  const waveform     = document.getElementById('waveform');
+  const sessionLabel = document.getElementById('sessionLabel');
+  const streamingBadge = document.getElementById('streamingBadge');
+  const cameraFeed   = document.getElementById('cameraFeed');
+  const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+  const micBtn       = document.getElementById('micBtn');
+
+  // ── Waveform card (dedicated slot in HTML) ────────────────────────────────
+  const waveformCard = document.getElementById('waveformCard');
+  const vizCanvas    = document.getElementById('vizCanvas');
+  const vizCtx       = vizCanvas.getContext('2d');
+
+  // ── Processing label (injected inside session label area) ─────────────────
+  const procEl = document.createElement('div');
+  procEl.style.display = 'none';
+  procEl.innerHTML = `<span class="text-[9px] font-mono text-sky-400 tracking-[0.2em] animate-pulse">PROCESSING_QUERY</span>`;
+  document.getElementById('sessionLabel').replaceWith(procEl);
+  const sessionLabelEl = document.createElement('span');
+  sessionLabelEl.id = 'sessionLabel';
+  sessionLabelEl.className = 'text-[9px] font-mono text-zinc-600 tracking-[0.2em] relative z-10 mt-4';
+  sessionLabelEl.textContent = 'GEMINI_LIVE_STANDBY';
+  procEl.parentNode && procEl.after(sessionLabelEl);
+
+  // ── Status ─────────────────────────────────────────────────────────────────
+  function setStatus(state) {
+    const map = {
+      ready:      ['bg-zinc-600',              'READY'],
+      connecting: ['bg-amber-500 animate-pulse','CONNECTING'],
+      listening:  ['bg-green-500 animate-pulse','LISTENING'],
+      processing: ['bg-sky-500 animate-pulse',  'PROCESSING'],
+      speaking:   ['bg-cyan-400 animate-pulse', 'SPEAKING'],
+      error:      ['bg-red-500',               'ERROR'],
+    };
+    const [cls, label] = map[state] || map.ready;
+    statusDot.className = `w-2 h-2 rounded-full ${cls}`;
+    statusText.textContent = label;
+    waveform.style.opacity = state === 'speaking' ? '0.6' : '0';
+    streamingBadge.textContent = state === 'listening' ? 'STREAMING_LIVE' : state === 'speaking' ? 'GEMINI_RESPONDING' : state === 'processing' ? 'PROCESSING_DATA' : 'STANDBY';
+    sessionLabel.textContent = `GEMINI_LIVE_${label}`;
+    waveformCard.style.setProperty('display', state === 'listening' ? 'flex' : 'none', 'important');
+    procEl.style.display = state === 'processing' ? 'block' : 'none';
+    // Mic button glow
+    if (state === 'listening') {
+      micBtn.style.boxShadow = '0 0 24px rgba(74,222,128,0.4)';
+      micBtn.style.borderColor = '#4ade80';
+    } else if (state === 'speaking') {
+      micBtn.style.boxShadow = '0 0 24px rgba(34,211,238,0.4)';
+      micBtn.style.borderColor = '#22d3ee';
+    } else if (state === 'processing') {
+      micBtn.style.boxShadow = '0 0 24px rgba(56,189,248,0.4)';
+      micBtn.style.borderColor = '#38bdf8';
+    } else {
+      micBtn.style.boxShadow = '';
+      micBtn.style.borderColor = '';
+    }
+  }
+
+  // ── Tap sound ─────────────────────────────────────────────────────────────
+  function playTap(freq = 880, dur = 0.06) {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(); osc.stop(ctx.currentTime + dur);
+      osc.onended = () => ctx.close();
+    } catch(_) {}
+  }
+
+  // ── Gemini audio playback (PCM16 24kHz) ───────────────────────────────────
+  function initPlayCtx() {
+    if (!playCtx) { playCtx = new AudioContext({ sampleRate: 24000 }); playNextTime = 0; }
+  }
+
+  function scheduleAudio(base64pcm) {
+    initPlayCtx();
+    const raw = atob(base64pcm);
+    const samples = raw.length / 2;
+    const buf = playCtx.createBuffer(1, samples, 24000);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < samples; i++) {
+      const lo = raw.charCodeAt(i * 2), hi = raw.charCodeAt(i * 2 + 1);
+      let s = (hi << 8) | lo;
+      if (s > 32767) s -= 65536;
+      ch[i] = s / 32768;
+    }
+    const src = playCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(playCtx.destination);
+    const now = playCtx.currentTime;
+    const start = Math.max(now, playNextTime);
+    src.start(start);
+    playNextTime = start + buf.duration;
+
+    // Re-open mic 300ms after this chunk finishes playing
+    // (reset on each new chunk so it always tracks the last one)
+    clearTimeout(micReopenTimer);
+    const msUntilEnd = (start - now + buf.duration) * 1000 + 300;
+    micReopenTimer = setTimeout(() => {
+      geminiSpeaking = false;
+      if (sessionActive) setStatus('listening');
+    }, msUntilEnd);
+  }
+
+  // ── Mic waveform visualizer ────────────────────────────────────────────────
+  function startViz() {
+    if (!analyser) return;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const draw = () => {
+      vizRaf = requestAnimationFrame(draw);
+      analyser.getByteTimeDomainData(data);
+      vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
+      vizCtx.strokeStyle = '#4ade80';
+      vizCtx.lineWidth = 1.5;
+      vizCtx.beginPath();
+      const step = vizCanvas.width / data.length;
+      data.forEach((v, i) => {
+        const y = (v / 128) * (vizCanvas.height / 2);
+        i === 0 ? vizCtx.moveTo(0, y) : vizCtx.lineTo(i * step, y);
+      });
+      vizCtx.stroke();
+    };
+    draw();
+  }
+
+  function stopViz() {
+    if (vizRaf) { cancelAnimationFrame(vizRaf); vizRaf = null; }
+    vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
+  }
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  async function toggleCamera() { cameraActive ? stopCamera() : await startCamera(); }
+
+  async function startCamera() {
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      cameraActive = true;
+    } catch (err) {
+      setStatus('error');
+      appendResponse(`Microphone error: ${err.name} — ${err.message}. Please allow mic access and try again.`);
+    }
+  }
+
+  // ── Session ────────────────────────────────────────────────────────────────
+  async function toggleSession() {
+    playTap(sessionActive ? 440 : 880);
+    sessionActive ? endSession() : await startSession();
+  }
+
+  async function startSession() {
+    if (!cameraActive) await startCamera();
+    setStatus('connecting');
+    sessionActive = true;
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/live`);
+    ws.onopen = () => {
+      setStatus('listening');
+      startAudioCapture();
+      startVideoFrames();
+    };
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'audio_output') {
+        // Play audio — mic always stays open, user can interrupt at any time
+        setStatus('speaking');
+        scheduleAudio(msg.data);
+      } else if (msg.type === 'transcript') {
+        if (msg.text) {
+          setStatus('processing');
+          typewrite(msg.text);
+          // Detect "bye" to end session gracefully
+          if (/\b(bye|goodbye|exit|stop listening|deactivate)\b/i.test(msg.text)) {
+            setTimeout(() => endSession(), 1500);
+          }
+        }
+        // mic re-opens via micReopenTimer once audio finishes playing
+      } else if (msg.type === 'data_update') {
+        updateCard(msg.dataset, msg.value, msg.count, msg.detail, msg.breakdown, msg.restaurants);
+      } else if (msg.type === 'agent_response') {
+        if (msg.spoken) typewrite(msg.spoken);
+        if (msg.chart) renderChart(msg.chart);
+      } else if (msg.type === 'location_detected') {
+        const banner = document.getElementById('detectedBanner');
+        document.getElementById('detectedPlace').textContent = msg.place.toUpperCase();
+        banner.classList.remove('hidden');
+        clearTimeout(banner._timer);
+        banner._timer = setTimeout(() => banner.classList.add('hidden'), 6000);
+        // Show detected place in coords display area
+        document.getElementById('coordsDisplay').classList.remove('hidden');
+        document.getElementById('coordsText').textContent = msg.place.toUpperCase();
+      }
+    };
+    ws.onerror = () => { setStatus('error'); appendResponse('Connection error. Is the backend running on port 8000?'); };
+    ws.onclose = () => { if (sessionActive) endSession(); };
+  }
+
+  function endSession() {
+    sessionActive = false;
+    geminiSpeaking = false;
+    userWasSpeaking = false;
+    clearTimeout(micReopenTimer);
+    clearTimeout(silenceTimer); silenceTimer = null;
+    ws?.close(); ws = null;
+    if (frameInterval) { clearInterval(frameInterval); frameInterval = null; }
+    audioCtx?.close(); audioCtx = null;
+    playCtx?.close(); playCtx = null; playNextTime = 0;
+    stopViz();
+    setStatus('ready');
+  }
+
+  function startAudioCapture() {
+    if (!mediaStream) return;
+    audioCtx = new AudioContext({ sampleRate: 16000 });
+    const source = audioCtx.createMediaStreamSource(mediaStream);
+
+    // Analyser for waveform viz
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    startViz();
+
+    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+    const silenceData = new Uint8Array(analyser.frequencyBinCount);
+    const SILENCE_THRESHOLD = 130;  // 0-255, values near 128 = silence
+    const SILENCE_HOLD_MS   = 1800;  // ms of silence before sending activity_end
+
+    processor.onaudioprocess = (e) => {
+      if (ws?.readyState !== WebSocket.OPEN) return;
+      const pcm = e.inputBuffer.getChannelData(0);
+      const int16 = new Int16Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++)
+        int16[i] = Math.max(-32768, Math.min(32767, pcm[i] * 32768));
+      ws.send(JSON.stringify({ type: 'audio', data: btoa(String.fromCharCode(...new Uint8Array(int16.buffer))) }));
+
+      // Silence detection for activity_end
+      analyser.getByteTimeDomainData(silenceData);
+      const maxAmp = silenceData.reduce((m, v) => Math.max(m, Math.abs(v - 128)), 0);
+      const speaking = maxAmp > 8;  // 8/128 = ~6% amplitude threshold
+      if (speaking) {
+        if (!userWasSpeaking) {
+          // Speech just started
+          ws.send(JSON.stringify({ type: 'audio_start' }));
+        }
+        userWasSpeaking = true;
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+      } else if (userWasSpeaking && !silenceTimer) {
+        silenceTimer = setTimeout(() => {
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'audio_end' }));
+          }
+          userWasSpeaking = false;
+          silenceTimer = null;
+        }, SILENCE_HOLD_MS);
+      }
+    };
+  }
+
+  function startVideoFrames() {
+    // Video frames disabled — City Pulse is a civic data voice agent, not a street-level visual agent.
+    // Street View is decorative only; Gemini Live uses voice input only to avoid location hallucinations.
+  }
+
+  // ── Chart.js rendering ──────────────────────────────────────────────────
+  let pulseChartInstance = null;
+
+  function renderChart(chartData) {
+    const container = document.getElementById('chartContainer');
+    if (!chartData || !chartData.labels || !chartData.datasets) {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = 'block';
+    const ctx = document.getElementById('pulseChart').getContext('2d');
+    if (pulseChartInstance) pulseChartInstance.destroy();
+
+    // Color palette
+    const palette = [
+      'rgba(245,158,11,0.8)', 'rgba(99,102,241,0.8)', 'rgba(16,185,129,0.8)',
+      'rgba(239,68,68,0.8)',  'rgba(59,130,246,0.8)', 'rgba(236,72,153,0.8)',
+    ];
+    chartData.datasets.forEach((ds, i) => {
+      ds.backgroundColor = ds.backgroundColor || palette[i % palette.length];
+      ds.borderColor = ds.borderColor || palette[i % palette.length].replace('0.8', '1');
+      ds.borderWidth = 1;
+    });
+
+    pulseChartInstance = new Chart(ctx, {
+      type: chartData.type || 'bar',
+      data: { labels: chartData.labels, datasets: chartData.datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: { display: !!chartData.title, text: chartData.title, color: '#e5e2e3', font: { family: 'Roboto Mono', size: 11 } },
+          legend: { labels: { color: '#9ca3af', font: { family: 'Roboto Mono', size: 10 } } },
+        },
+        scales: chartData.type === 'pie' ? {} : {
+          x: { ticks: { color: '#9ca3af', font: { family: 'Roboto Mono', size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { ticks: { color: '#9ca3af', font: { family: 'Roboto Mono', size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        },
+      },
+    });
+  }
+
+  // ── Intent classification ────────────────────────────────────────────────
+  let nanoSession = null;
+  (async () => {
+    try {
+      if (window.ai && window.ai.languageModel) {
+        nanoSession = await window.ai.languageModel.create({
+          systemPrompt: 'Classify the question into ONE word: lending, algorithm, gig, or general. Reply only the word.'
+        });
+      }
+    } catch(e) { /* Gemini Nano unavailable, using keyword fallback */ }
+  })();
+
+  async function classifyIntent(text) {
+    if (nanoSession) {
+      try {
+        const r = await nanoSession.prompt(text);
+        const cat = r.trim().toLowerCase();
+        if (['lending','algorithm','gig'].includes(cat)) return cat;
+      } catch(e) {}
+    }
+    const t = text.toLowerCase();
+    if (/mortgage|loan|lending|redlin|hmda|racial bias|approv|deni|credit/.test(t)) return 'lending';
+    if (/algorithm|ai tool|automat|surveillance|decision|agency.*ai|ai.*agency/.test(t)) return 'algorithm';
+    if (/deliver|gig|worker|earn|doordash|uber eats|grubhub|wage|salary|expense/.test(t)) return 'gig';
+    return 'general';
+  }
+
+  // ── Demo buttons ─────────────────────────────────────────────────────────
+  async function fireDemo(text, intent) {
+    if (!sessionActive) await startSession();
+    // Wait for WS to open (up to 3s)
+    await new Promise(resolve => {
+      const t = setInterval(() => { if (ws?.readyState === WebSocket.OPEN) { clearInterval(t); resolve(); } }, 100);
+      setTimeout(() => { clearInterval(t); resolve(); }, 3000);
+    });
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'text_query', text, intent_hint: intent }));
+    typewrite('Querying: ' + text);
+  }
+
+  function appendResponse(text) {
+    responseText.innerHTML = `<span class="text-amber-500 mr-2">&gt;</span><span class="text-zinc-300">${text}</span>`;
+  }
+
+  function typewrite(text) {
+    responseText.innerHTML = `<span class="text-amber-500 mr-2">&gt;</span>`;
+    const span = document.createElement('span');
+    span.className = 'text-zinc-200';
+    responseText.appendChild(span);
+    const cursor = document.createElement('span');
+    cursor.className = 'typewriter-cursor';
+    responseText.appendChild(cursor);
+    let i = 0;
+    const iv = setInterval(() => {
+      if (i < text.length) span.textContent += text[i++];
+      else { clearInterval(iv); setTimeout(() => cursor.remove(), 2000); }
+    }, 20);
+  }
+
+  let breakdown311 = [];
+  let breakdownCrime = [];
+
+  function flashCard(el) {
+    el.classList.remove('card-flash');
+    void el.offsetWidth;
+    el.classList.add('card-flash');
+  }
+
+  function renderBreakdown(containerId, items, countColor) {
+    document.getElementById(containerId).innerHTML = items.map(b =>
+      `<div class="flex justify-between items-center py-1 border-b border-white/5">
+        <span class="text-[10px] font-mono text-zinc-300 pr-2">${b.type}</span>
+        <span class="text-[10px] font-mono ${countColor} flex-shrink-0">${b.count}</span>
+      </div>`
+    ).join('');
+  }
+
+  function updateCard(dataset, value, count, detail, breakdown, restaurants) {
+    if (dataset === '311') {
+      const el = document.getElementById('card311Value').parentElement.parentElement;
+      document.getElementById('card311Value').textContent = count;
+      document.getElementById('card311Detail').textContent = detail;
+      document.getElementById('card311Status').textContent = 'VERIFIED_SIGNAL';
+      breakdown311 = breakdown || [];
+      if (breakdown311.length > 0) {
+        document.getElementById('card311Toggle').classList.remove('hidden');
+        renderBreakdown('card311Breakdown', breakdown311, 'text-amber-500');
+      }
+      flashCard(el);
+    } else if (dataset === 'restaurants') {
+      const el = document.getElementById('cardGradeValue').parentElement.parentElement;
+      document.getElementById('cardGradeValue').textContent = value;
+      document.getElementById('cardGradeDetail').textContent = detail;
+      document.getElementById('cardGradeStatus').textContent = 'STABLE_METRIC';
+      restaurantList = breakdown && breakdown.length ? breakdown : (restaurants || []);
+      if (restaurants && restaurants.length > 0) {
+        restaurantList = restaurants;
+        document.getElementById('cardGradeToggle').classList.remove('hidden');
+        renderRestaurantCards(restaurants);
+      }
+      flashCard(el);
+    } else if (dataset === 'crime') {
+      const el = document.getElementById('cardCrimeValue').parentElement.parentElement;
+      document.getElementById('cardCrimeValue').textContent = count;
+      document.getElementById('cardCrimeDetail').textContent = detail;
+      document.getElementById('cardCrimeStatus').textContent = count > 10 ? 'ALERT_PRIORITY_HIGH' : 'NOMINAL';
+      breakdownCrime = breakdown || [];
+      if (breakdownCrime.length > 0) {
+        document.getElementById('cardCrimeToggle').classList.remove('hidden');
+        renderBreakdown('cardCrimeBreakdown', breakdownCrime, 'text-red-400');
+      }
+      flashCard(el);
+    }
+  }
+
+  function toggle311Panel() {
+    if (breakdown311.length === 0) return;
+    document.getElementById('modal311').classList.toggle('hidden');
+  }
+
+  function toggleCrimePanel() {
+    if (breakdownCrime.length === 0) return;
+    document.getElementById('modalCrime').classList.toggle('hidden');
+  }
+
+  function toggleRestaurantPanel() {
+    if (restaurantList.length === 0) return;
+    document.getElementById('modalRestaurants').classList.toggle('hidden');
+  }
+
+  const GRADE_COLOR = { A: 'text-emerald-400 border-emerald-500/40', B: 'text-amber-400 border-amber-500/40', C: 'text-red-400 border-red-500/40' };
+
+  function renderRestaurantCards(restaurants) {
+    const container = document.getElementById('restaurantCards');
+    container.innerHTML = restaurants.map((r, i) => {
+      const gradeColor = GRADE_COLOR[r.grade] || 'text-zinc-400 border-zinc-600/40';
+      return `<div id="rcard-${i}" class="bg-zinc-800/60 border border-white/5 p-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <p class="font-mono text-xs text-zinc-100 font-bold truncate">${r.name}</p>
+            <p class="font-mono text-[10px] text-zinc-500 mt-0.5">${r.cuisine}${r.address ? ' · ' + r.address : ''}</p>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span id="rating-${i}" class="font-mono text-[10px] text-zinc-600">...</span>
+            <span class="font-headline text-xl font-bold border px-2 py-0.5 ${gradeColor}">${r.grade}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Fetch Google ratings async for each restaurant
+    if (!placesService) return;
+    restaurants.forEach((r, i) => {
+      placesService.findPlaceFromQuery(
+        { query: `${r.name} ${r.address} New York`, fields: ['rating', 'user_ratings_total'] },
+        (results, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && results[0]) {
+            const p = results[0];
+            const el = document.getElementById(`rating-${i}`);
+            if (el && p.rating) {
+              el.textContent = `⭐ ${p.rating}`;
+              el.className = 'font-mono text-[10px] text-amber-400';
+            }
+          }
+        }
+      );
+    });
+  }
+</script>
+</body>
+</html>
