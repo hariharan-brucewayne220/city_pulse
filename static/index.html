@@ -694,6 +694,7 @@
         }
         // mic re-opens via micReopenTimer once audio finishes playing
       } else if (msg.type === 'data_update') {
+        hideChartLoader();  // street queries send data_update, not agent_response
         updateCard(msg.dataset, msg.value, msg.count, msg.detail, msg.breakdown, msg.restaurants);
         // If we have a current location, show data circle on map
         if (msg.dataset === '311' && msg.count > 0 && currentLat && currentLng) {
@@ -857,12 +858,16 @@
     });
   }
 
+  let chartLoaderTimer = null;
   function showChartLoader() {
     const loader = document.getElementById('chartLoader');
     loader.style.removeProperty('display');
     loader.style.display = 'flex';
+    clearTimeout(chartLoaderTimer);
+    chartLoaderTimer = setTimeout(hideChartLoader, 35000);  // safety: auto-hide after 35s
   }
   function hideChartLoader() {
+    clearTimeout(chartLoaderTimer);
     document.getElementById('chartLoader').style.display = 'none';
   }
   // ── Intent classification ────────────────────────────────────────────────
