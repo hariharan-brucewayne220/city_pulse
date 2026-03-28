@@ -76,7 +76,7 @@ async def generate_story_card(spoken: str, intent: str = "general") -> dict | No
 async def _generate(prompt: str) -> dict | None:
     client = _get_client()
     response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash-preview-image-generation",
+        model="gemini-2.0-flash-exp",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE", "TEXT"],
