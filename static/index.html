@@ -678,7 +678,10 @@
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === 'audio_output') {
-        // Play audio — mic always stays open, user can interrupt at any time
+        geminiSpeaking = true;
+        // Reset any pending user speech state — Gemini just took the turn
+        userWasSpeaking = false;
+        clearTimeout(silenceTimer); silenceTimer = null;
         setStatus('speaking');
         scheduleAudio(msg.data);
       } else if (msg.type === 'transcript') {
@@ -764,27 +767,28 @@
       for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
       ws.send(JSON.stringify({ type: 'audio', data: btoa(b) }));
 
-      // Silence detection for activity_end
-      analyser.getByteTimeDomainData(silenceData);
-      const maxAmp = silenceData.reduce((m, v) => Math.max(m, Math.abs(v - 128)), 0);
-      const speaking = maxAmp > 8;  // 8/128 = ~6% amplitude threshold
-      if (speaking) {
-        if (!userWasSpeaking) {
-          // Speech just started
-          ws.send(JSON.stringify({ type: 'audio_start' }));
-        }
-        userWasSpeaking = true;
-        clearTimeout(silenceTimer);
-        silenceTimer = null;
-      } else if (userWasSpeaking && !silenceTimer) {
-        silenceTimer = setTimeout(() => {
-          if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'audio_end' }));
-            showChartLoader();  // show loader as soon as user finishes speaking
+      // Silence detection — skip entirely while Gemini is speaking to prevent echo loop
+      if (!geminiSpeaking) {
+        analyser.getByteTimeDomainData(silenceData);
+        const maxAmp = silenceData.reduce((m, v) => Math.max(m, Math.abs(v - 128)), 0);
+        const speaking = maxAmp > 12;  // slightly raised threshold to ignore mic noise
+        if (speaking) {
+          if (!userWasSpeaking) {
+            ws.send(JSON.stringify({ type: 'audio_start' }));
           }
-          userWasSpeaking = false;
+          userWasSpeaking = true;
+          clearTimeout(silenceTimer);
           silenceTimer = null;
-        }, SILENCE_HOLD_MS);
+        } else if (userWasSpeaking && !silenceTimer) {
+          silenceTimer = setTimeout(() => {
+            if (ws?.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'audio_end' }));
+              showChartLoader();
+            }
+            userWasSpeaking = false;
+            silenceTimer = null;
+          }, SILENCE_HOLD_MS);
+        }
       }
     };
   }
