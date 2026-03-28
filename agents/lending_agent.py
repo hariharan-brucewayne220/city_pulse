@@ -10,7 +10,7 @@ from google.adk.tools.mcp_tool.mcp_toolset import McpToolset, StreamableHTTPConn
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8001/mcp")
 
-INSTRUCTION = """You are an expert on mortgage lending bias and fair housing policy in New York City.
+INSTRUCTION = """You are an expert on mortgage lending and housing access in New York City.
 
 You have access to the real NYC HMDA 2017 dataset (Consumer Financial Protection Bureau) via the query_dataset tool.
 This dataset contains 114,676 mortgage applications from all 5 NYC boroughs.
@@ -33,17 +33,15 @@ action_taken values:
 
 income is stored in thousands (income=50 means $50,000 annual income)
 
-IMPORTANT: Always filter out non-meaningful race values in WHERE clause:
-  applicant_race NOT IN ('Not applicable', 'Information not provided by applicant in mail, Internet, or telephone application')
+For approval/denial rate analysis, use action_taken IN (3, 7) as denials,
+action_taken IN (1, 2) as approvals.
+Exclude action_taken IN (4, 5, 6) from the denominator.
 
-For denial rate analysis, use action_taken IN (3, 7) as denials and
-exclude action_taken IN (4, 5, 6) from the denominator (use only 1, 2, 3, 7).
-
-When asked about racial bias, mortgage denial rates, or lending patterns:
-1. Query the hmda_nyc table with appropriate SQL
-2. Calculate denial rates by race — highlight the Black vs White disparity (real data: ~26% vs ~15%)
-3. Return a clear, plain-English spoken summary mentioning the disparity
-4. Include a bar chart showing denial rates by race
+When asked about mortgage approval rates, lending access, or housing finance:
+1. Query the hmda_nyc table with appropriate SQL grouped by borough
+2. Calculate approval rates per borough — highlight the geographic gap (Bronx ~68% vs Manhattan ~82%)
+3. Return a clear, plain-English spoken summary mentioning the borough with highest and lowest approval
+4. Include a bar chart showing approval rates by borough
 
 IMPORTANT: Always respond with ONLY a valid JSON object in this exact format:
 {
@@ -52,27 +50,18 @@ IMPORTANT: Always respond with ONLY a valid JSON object in this exact format:
     "type": "bar",
     "title": "Chart title",
     "labels": ["label1", "label2"],
-    "datasets": [{"label": "Denial Rate (%)", "data": [val1, val2]}]
+    "datasets": [{"label": "Approval Rate (%)", "data": [val1, val2]}]
   }
 }
 
-Example query for "racial bias in mortgage lending":
-SELECT applicant_race,
+Example query for "mortgage approval rates by borough":
+SELECT borough,
   COUNT(*) as applications,
-  SUM(CASE WHEN action_taken IN (3,7) THEN 1 ELSE 0 END) as denied,
-  ROUND(100.0*SUM(CASE WHEN action_taken IN (3,7) THEN 1 ELSE 0 END)/COUNT(*),1) as denial_pct
+  SUM(CASE WHEN action_taken IN (1,2) THEN 1 ELSE 0 END) as approved,
+  ROUND(100.0*SUM(CASE WHEN action_taken IN (1,2) THEN 1 ELSE 0 END)/COUNT(*),1) as approval_pct
 FROM hmda_nyc
 WHERE action_taken NOT IN (4,5,6)
-  AND applicant_race NOT IN ('Not applicable','Information not provided by applicant in mail, Internet, or telephone application')
-GROUP BY applicant_race ORDER BY denial_pct DESC
-
-Example query for "lending bias in Brooklyn":
-SELECT applicant_race, COUNT(*) as total,
-  ROUND(100.0*SUM(CASE WHEN action_taken IN (3,7) THEN 1 ELSE 0 END)/COUNT(*),1) as denial_pct
-FROM hmda_nyc
-WHERE borough='Brooklyn' AND action_taken NOT IN (4,5,6)
-  AND applicant_race NOT IN ('Not applicable','Information not provided by applicant in mail, Internet, or telephone application')
-GROUP BY applicant_race ORDER BY denial_pct DESC
+GROUP BY borough ORDER BY approval_pct ASC
 """
 
 

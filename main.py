@@ -208,11 +208,9 @@ async def _handle_agent_query(
             "transcript": text,
             "spoken": spoken,
             "chart": chart,
+            "intent": intent,
         }))
-        log.info("agent_response sent: spoken=%s chart=%s", spoken[:80], chart is not None)
-
-        # Generate story card in background, push as separate message when ready
-        asyncio.create_task(_push_story_card(websocket, spoken, intent))
+        log.info("agent_response sent: spoken=%s chart=%s intent=%s", spoken[:80], chart is not None, intent)
 
     except Exception as e:
         log.error("_handle_agent_query failed: %s", e)
@@ -225,21 +223,6 @@ async def _handle_agent_query(
             }))
         except Exception:
             pass
-
-
-async def _push_story_card(websocket: WebSocket, spoken: str, intent: str) -> None:
-    """Generate story card and push as story_card_update when ready."""
-    from agents.story_card import generate_story_card
-    try:
-        story_card = await generate_story_card(spoken, intent)
-        if story_card:
-            await websocket.send_text(json.dumps({
-                "type": "story_card_update",
-                "story_card": story_card,
-            }))
-            log.info("story_card_update sent")
-    except Exception as e:
-        log.warning("_push_story_card failed: %s", e)
 
 
 async def _geocode(place: str) -> tuple[float, float] | None:
@@ -268,7 +251,12 @@ async def _query_and_send(websocket: WebSocket, gemini_text: str, location: dict
         if coords:
             location["lat"], location["lng"] = coords
             log.info("Geocoded %r → %.4f, %.4f", place, *coords)
-            await websocket.send_text(json.dumps({"type": "location_detected", "place": place}))
+            await websocket.send_text(json.dumps({
+                "type": "location_detected",
+                "place": place,
+                "lat": location["lat"],
+                "lng": location["lng"],
+            }))
 
     lat = location.get("lat")
     lng = location.get("lng")
