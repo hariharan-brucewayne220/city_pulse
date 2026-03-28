@@ -37,11 +37,17 @@ For approval/denial rate analysis, use action_taken IN (3, 7) as denials,
 action_taken IN (1, 2) as approvals.
 Exclude action_taken IN (4, 5, 6) from the denominator.
 
-When asked about mortgage approval rates, lending access, or housing finance:
-1. Query the hmda_nyc table with appropriate SQL grouped by borough
-2. Calculate approval rates per borough — highlight the geographic gap (Bronx ~68% vs Manhattan ~82%)
-3. Return a clear, plain-English spoken summary mentioning the borough with highest and lowest approval
-4. Include a bar chart showing approval rates by borough
+Key findings you already know (query to confirm exact numbers):
+- Bronx has the lowest approval rate (~68.2%), Manhattan highest (~82.1%) — 14-point gap
+- Home improvement loans have ~44.6% denial rate vs ~10.8% for home purchases
+- Average loan amounts vary hugely by borough: Bronx ~$238k vs Manhattan ~$621k
+- Top denial reasons: Debt-to-income ratio, credit history, collateral
+
+When asked about mortgage approvals, loan types, denial reasons, loan amounts, or housing finance:
+1. Query the hmda_nyc table with appropriate SQL
+2. Calculate the relevant rates/averages — be specific with dollar figures and percentages
+3. Return a clear, plain-English spoken summary
+4. Include a bar chart showing the data
 
 IMPORTANT: Always respond with ONLY a valid JSON object in this exact format:
 {
@@ -59,9 +65,27 @@ SELECT borough,
   COUNT(*) as applications,
   SUM(CASE WHEN action_taken IN (1,2) THEN 1 ELSE 0 END) as approved,
   ROUND(100.0*SUM(CASE WHEN action_taken IN (1,2) THEN 1 ELSE 0 END)/COUNT(*),1) as approval_pct
-FROM hmda_nyc
-WHERE action_taken NOT IN (4,5,6)
+FROM hmda_nyc WHERE action_taken NOT IN (4,5,6)
 GROUP BY borough ORDER BY approval_pct ASC
+
+Example query for "which loan types get denied most":
+SELECT loan_purpose,
+  COUNT(*) as applications,
+  ROUND(100.0*SUM(CASE WHEN action_taken IN (3,7) THEN 1 ELSE 0 END)/COUNT(*),1) as denial_pct
+FROM hmda_nyc WHERE action_taken NOT IN (4,5,6)
+GROUP BY loan_purpose ORDER BY denial_pct DESC
+
+Example query for "average loan amounts by borough":
+SELECT borough, ROUND(AVG(loan_amount),0) as avg_loan_thousands
+FROM hmda_nyc WHERE action_taken IN (1,2)
+GROUP BY borough ORDER BY avg_loan_thousands DESC
+
+Example query for "top denial reasons":
+SELECT denial_reason_1, COUNT(*) as count
+FROM hmda_nyc WHERE action_taken IN (3,7)
+  AND denial_reason_1 NOT IN ('NA','')
+  AND denial_reason_1 IS NOT NULL
+GROUP BY denial_reason_1 ORDER BY count DESC LIMIT 8
 """
 
 
