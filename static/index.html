@@ -522,6 +522,7 @@
       } else if (msg.type === 'agent_response') {
         if (msg.spoken) typewrite(msg.spoken);
         if (msg.chart) renderChart(msg.chart);
+      } else if (msg.type === 'story_card_update') {
         renderStoryCard(msg.story_card);
       } else if (msg.type === 'location_detected') {
         const banner = document.getElementById('detectedBanner');

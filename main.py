@@ -194,25 +194,24 @@ async def ws_live(websocket: WebSocket):
 async def _handle_agent_query(
     websocket: WebSocket, text: str, intent: str
 ) -> None:
-    """Route to ADK orchestrator and send agent_response (chart + story card) to browser."""
-    from agents.story_card import generate_story_card
+    """Route to ADK orchestrator, send chart immediately, push story card when ready."""
     try:
         agent_result = await route_query(text, intent)
         spoken = agent_result.get("spoken", "")
         chart = agent_result.get("chart")
 
-        # Generate story card — intent-aware prompt, timeout handled inside
-        story_card = await generate_story_card(spoken, intent)
-
+        # Send chart immediately — don't wait for image generation
         await websocket.send_text(json.dumps({
             "type": "agent_response",
             "transcript": text,
             "spoken": spoken,
             "chart": chart,
-            "story_card": story_card,
         }))
-        log.info("agent_response sent: spoken=%s chart=%s story_card=%s",
-                 spoken[:80], chart is not None, story_card is not None)
+        log.info("agent_response sent: spoken=%s chart=%s", spoken[:80], chart is not None)
+
+        # Generate story card in background, push as separate message when ready
+        asyncio.create_task(_push_story_card(websocket, spoken, intent))
+
     except Exception as e:
         log.error("_handle_agent_query failed: %s", e)
         try:
@@ -221,10 +220,24 @@ async def _handle_agent_query(
                 "transcript": text,
                 "spoken": "Sorry, I had trouble querying the data.",
                 "chart": None,
-                "story_card": None,
             }))
         except Exception:
             pass
+
+
+async def _push_story_card(websocket: WebSocket, spoken: str, intent: str) -> None:
+    """Generate story card and push as story_card_update when ready."""
+    from agents.story_card import generate_story_card
+    try:
+        story_card = await generate_story_card(spoken, intent)
+        if story_card:
+            await websocket.send_text(json.dumps({
+                "type": "story_card_update",
+                "story_card": story_card,
+            }))
+            log.info("story_card_update sent")
+    except Exception as e:
+        log.warning("_push_story_card failed: %s", e)
 
 
 async def _geocode(place: str) -> tuple[float, float] | None:
