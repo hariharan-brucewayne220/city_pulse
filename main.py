@@ -11,6 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import types
 
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -69,6 +71,11 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 @app.get("/")
 async def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/slides")
+async def slides():
+    return FileResponse(STATIC_DIR / "slides.html")
 
 
 @app.get("/health")

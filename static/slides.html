@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>City Pulse — Presentation</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #131314;
+    --surface: #1c1c1e;
+    --surface2: #252527;
+    --amber: #ffc880;
+    --cyan: #00e3fd;
+    --green: #4ade80;
+    --red: #f87171;
+    --text: #e5e2e3;
+    --muted: #888;
+    --border: #333;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .deck { width: 100%; height: 100vh; position: relative; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 60px 80px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .slide.active { opacity: 1; pointer-events: all; }
+
+  /* nav */
+  .nav {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; z-index: 100; align-items: center;
+  }
+  .nav button {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 20px; border-radius: 8px;
+    font-family: inherit; font-size: 14px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .nav button:hover { background: #333; }
+  .slide-num {
+    font-size: 13px; color: var(--muted);
+    font-family: 'Roboto Mono', monospace;
+    min-width: 60px; text-align: center;
+  }
+
+  /* Progress bar */
+  .progress {
+    position: fixed; top: 0; left: 0; height: 3px;
+    background: var(--amber); transition: width 0.4s ease;
+    z-index: 100;
+  }
+
+  /* ─── Slide content helpers ─── */
+  .tag {
+    font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--amber); margin-bottom: 12px; font-family: 'Roboto Mono', monospace;
+  }
+  h1 { font-size: 56px; font-weight: 700; line-height: 1.1; }
+  h2 { font-size: 40px; font-weight: 700; line-height: 1.15; }
+  h3 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+  .sub { font-size: 20px; color: var(--muted); margin-top: 16px; line-height: 1.5; max-width: 700px; text-align: center; }
+  .accent { color: var(--amber); }
+  .cyan { color: var(--cyan); }
+  .green-t { color: var(--green); }
+  .red-t { color: var(--red); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px 32px;
+  }
+  .card-sm {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 960px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; width: 100%; max-width: 1000px; }
+
+  .stat { font-size: 48px; font-weight: 700; color: var(--amber); }
+  .stat-label { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+  .badge {
+    display: inline-block; padding: 4px 12px; border-radius: 99px;
+    font-size: 12px; font-weight: 600; font-family: 'Roboto Mono', monospace;
+  }
+  .badge-amber { background: rgba(255,200,128,0.15); color: var(--amber); border: 1px solid rgba(255,200,128,0.3); }
+  .badge-cyan  { background: rgba(0,227,253,0.12); color: var(--cyan); border: 1px solid rgba(0,227,253,0.25); }
+  .badge-green { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
+
+  ul.check { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  ul.check li { display: flex; gap: 12px; align-items: flex-start; font-size: 17px; line-height: 1.5; }
+  ul.check li::before { content: "✓"; color: var(--amber); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+  /* arch diagram */
+  .arch {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px; line-height: 1.9;
+    color: #aaa;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px 36px;
+  }
+  .arch .hi { color: var(--amber); }
+  .arch .hi2 { color: var(--cyan); }
+  .arch .hi3 { color: var(--green); }
+
+  .two-path {
+    display: flex; gap: 40px; align-items: stretch; width: 100%; max-width: 960px;
+  }
+  .path {
+    flex: 1; border-radius: 14px; padding: 28px 28px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .path-voice { background: rgba(255,200,128,0.07); border: 1px solid rgba(255,200,128,0.25); }
+  .path-data  { background: rgba(0,227,253,0.07);   border: 1px solid rgba(0,227,253,0.2);   }
+  .path h3 { font-size: 18px; font-weight: 700; }
+  .path .step { font-size: 14px; color: var(--muted); display: flex; gap: 10px; align-items: flex-start; line-height: 1.5; }
+  .path .step span { flex-shrink: 0; }
+
+  /* tech table */
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 12px 16px; font-size: 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; font-family: 'Roboto Mono', monospace; }
+  td:first-child { color: var(--amber); font-family: 'Roboto Mono', monospace; font-size: 13px; }
+
+  /* finding cards */
+  .finding { border-left: 3px solid var(--amber); padding-left: 20px; margin-bottom: 20px; }
+  .finding .num { font-size: 36px; font-weight: 700; color: var(--amber); }
+  .finding .desc { font-size: 15px; color: var(--muted); margin-top: 4px; }
+
+  /* slide 1 special */
+  .logo-pulse {
+    width: 80px; height: 80px; border-radius: 20px;
+    background: linear-gradient(135deg, var(--amber), #ff9d00);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px; margin-bottom: 24px;
+    box-shadow: 0 0 40px rgba(255,200,128,0.3);
+  }
+
+  /* score bar */
+  .score-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .score-label { width: 320px; font-size: 15px; }
+  .score-bar-bg { flex: 1; height: 8px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 99px; background: var(--amber); }
+  .score-pct { font-size: 14px; color: var(--amber); font-family: 'Roboto Mono', monospace; width: 36px; text-align: right; }
+
+  /* demo slide */
+  .demo-q {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 20px; font-size: 15px; color: var(--text);
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .demo-q .icon { color: var(--amber); flex-shrink: 0; font-size: 16px; }
+  .demo-followup { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+  .logo-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .glogo {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 20px;
+    font-size: 14px; font-weight: 600; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .glogo .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-blue   { background: #4285F4; }
+  .dot-red    { background: #EA4335; }
+  .dot-yellow { background: #FBBC05; }
+  .dot-green  { background: #34A853; }
+
+  .wt { width: 100%; max-width: 960px; }
+
+  /* keyboard hint */
+  .key-hint { position: fixed; top: 20px; right: 24px; font-size: 12px; color: #555; font-family: 'Roboto Mono', monospace; }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="key-hint">← → or click nav</div>
+
+<div class="deck" id="deck">
+
+  <!-- ═══ SLIDE 1: TITLE ═══ -->
+  <div class="slide active" id="s1">
+    <div class="logo-pulse">🏙️</div>
+    <div class="tag">Google × NYU Tandon · Build With AI 2026</div>
+    <h1 style="text-align:center">City <span class="accent">Pulse</span></h1>
+    <p class="sub">Real-time voice intelligence for NYC civic data.<br/>Speak naturally. Get precise answers. See the city.</p>
+    <div style="display:flex;gap:12px;margin-top:32px">
+      <span class="badge badge-amber">Gemini Live</span>
+      <span class="badge badge-cyan">Google ADK</span>
+      <span class="badge badge-green">MCP + DuckDB</span>
+      <span class="badge badge-amber">Cloud Run</span>
+    </div>
+    <div style="margin-top:24px;display:flex;flex-direction:column;align-items:center;gap:6px">
+      <div style="font-size:12px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;font-family:'Roboto Mono',monospace">Team Member</div>
+      <div style="font-size:18px;font-weight:600">Hariharan L</div>
+    </div>
+    <div style="margin-top:16px;font-size:13px;color:var(--muted);font-family:'Roboto Mono',monospace">
+      city-pulse-551379536248.us-central1.run.app
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 2: THE PROBLEM ═══ -->
+  <div class="slide" id="s2">
+    <div style="width:100%;max-width:900px">
+      <div class="tag">The Problem</div>
+      <h2>NYC's civic data is <span class="accent">public</span>.<br/>But no one can reach it.</h2>
+      <p style="font-size:20px;color:var(--muted);margin:24px 0;max-width:680px;line-height:1.7">
+        Critical data on housing, workers, and city AI tools sits buried in spreadsheets and agency PDFs.
+        Accessing it requires SQL skills most citizens don't have —
+        so they can't ask questions, and can't hold the city accountable.
+      </p>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 3: THE SOLUTION ═══ -->
+  <div class="slide" id="s3">
+    <div style="width:100%;max-width:900px">
+      <div class="tag">The Solution</div>
+      <h2>Talk to the data.<br/>Get <span class="accent">real answers</span>.</h2>
+      <div style="height:28px"></div>
+      <ul class="check">
+        <li><div><strong>Voice-first</strong> — Gemini Live speech-to-speech. No typing. No menus. Just ask.</div></li>
+        <li><div><strong>Grounded in reality</strong> — every answer backed by actual NYC open datasets via MCP + DuckDB. Zero hallucination.</div></li>
+        <li><div><strong>Three outputs simultaneously</strong> — voice answer, precise chart, live borough map. All under 20 seconds.</div></li>
+        <li><div><strong>Three civic lenses</strong> — AI transparency, mortgage access, gig worker economics.</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 4: MULTIMODAL EXPERIENCE ═══ -->
+  <div class="slide" id="s4">
+    <div style="width:100%;max-width:960px">
+      <div class="tag">Multimodal — "See, Hear, and Speak"</div>
+      <h2>Three outputs. <span class="accent">One question.</span></h2>
+      <div style="height:28px"></div>
+      <div class="two-path">
+        <div class="path path-voice">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:24px">🎙️</span>
+            <h3 style="color:var(--amber)">Voice — Instant</h3>
+          </div>
+          <div class="step"><span>1.</span> User speaks naturally into mic</div>
+          <div class="step"><span>2.</span> Gemini Live processes PCM audio at 16kHz</div>
+          <div class="step"><span>3.</span> Manual VAD detects end of speech</div>
+          <div class="step"><span>4.</span> Gemini responds by voice in &lt;2s</div>
+          <div style="margin-top:8px;font-size:13px;color:var(--amber)">Real-time speech-to-speech</div>
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px">
+          <div style="font-size:20px">⚡</div>
+          <div style="font-size:12px;color:var(--muted);text-align:center;font-family:'Roboto Mono',monospace">parallel</div>
+        </div>
+        <div class="path path-data">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:24px">📊</span>
+            <h3 style="color:var(--cyan)">Chart + Map — Precise</h3>
+          </div>
+          <div class="step"><span>1.</span> Intent classified (algorithm / lending / gig)</div>
+          <div class="step"><span>2.</span> ADK sub-agent writes SQL query</div>
+          <div class="step"><span>3.</span> MCP → DuckDB → real NYC CSV data</div>
+          <div class="step"><span>4.</span> Chart animates in, map choropleth updates</div>
+          <div style="margin-top:8px;font-size:13px;color:var(--cyan)">Exact numbers from real data</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 5: ARCHITECTURE ═══ -->
+  <div class="slide" id="s5">
+    <div style="width:100%;max-width:960px;display:flex;flex-direction:column;align-items:center">
+      <div class="tag">Architecture</div>
+      <h2>Google-native <span class="accent">all the way down</span></h2>
+      <div style="height:20px"></div>
+      <img src="/static/arch_diagram.png" alt="Architecture Diagram"
+           style="max-width:100%;max-height:60vh;border-radius:12px;border:1px solid var(--border);object-fit:contain"/>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 6: GOOGLE TECH ═══ -->
+  <div class="slide" id="s6">
+    <div style="width:100%;max-width:900px">
+      <div class="tag">Google Technologies Used</div>
+      <h2>Built on <span class="accent">Google AI</span> end-to-end</h2>
+      <div style="height:24px"></div>
+      <table>
+        <thead><tr><th>Technology</th><th>How We Use It</th><th>Why It Matters</th></tr></thead>
+        <tbody>
+          <tr><td>Gemini Live API</td><td>Real-time S2S voice, manual VAD, transcription</td><td>The "hear &amp; speak" layer — no TTS latency</td></tr>
+          <tr><td>Google ADK</td><td>LlmAgent × 3, A2A routing, Runner, Sessions</td><td>Multi-agent orchestration without boilerplate</td></tr>
+          <tr><td>MCP Protocol</td><td>Streamable HTTP, query_dataset tool</td><td>Standard interface between agents and data</td></tr>
+          <tr><td>Gemini Flash Lite</td><td>Powers all 3 civic sub-agents</td><td>Fast + cheap for high-frequency SQL generation</td></tr>
+          <tr><td>Google Maps JS API</td><td>Borough choropleth, geolocation, Places</td><td>The "see" layer — data becomes visual geography</td></tr>
+          <tr><td>Google Cloud Run</td><td>Serverless container, single command deploy</td><td>Zero-config scaling, always-on live demo</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 7: GROUNDING / NO HALLUCINATION ═══ -->
+  <div class="slide" id="s7">
+    <div style="width:100%;max-width:900px">
+      <div class="tag">Grounding — Zero Hallucination</div>
+      <h2>Every answer traced to<br/><span class="accent">real NYC open data</span></h2>
+      <div style="height:28px"></div>
+      <div class="grid-3">
+        <div class="card">
+          <div style="font-size:13px;color:var(--muted);font-family:'Roboto Mono',monospace;margin-bottom:12px">CFPB HMDA 2017</div>
+          <h3>Mortgage Access</h3>
+          <div style="font-size:13px;color:var(--muted);margin-top:8px">114,676 loan applications<br/>All 5 NYC boroughs</div>
+          <div style="margin-top:14px;font-size:22px;font-weight:700;color:var(--amber)">68.2% → 82.1%</div>
+          <div style="font-size:12px;color:var(--muted)">Bronx to Manhattan approval rate</div>
+        </div>
+        <div class="card">
+          <div style="font-size:13px;color:var(--muted);font-family:'Roboto Mono',monospace;margin-bottom:12px">NYC Open Data ADS</div>
+          <h3>AI Tools</h3>
+          <div style="font-size:13px;color:var(--muted);margin-top:8px">132 algorithmic tools<br/>36 city agencies</div>
+          <div style="margin-top:14px;font-size:22px;font-weight:700;color:var(--amber)">76%</div>
+          <div style="font-size:12px;color:var(--muted)">tools with unknown vendors</div>
+        </div>
+        <div class="card">
+          <div style="font-size:13px;color:var(--muted);font-family:'Roboto Mono',monospace;margin-bottom:12px">NYC DCWP Quarterly</div>
+          <h3>Gig Workers</h3>
+          <div style="font-size:13px;color:var(--muted);margin-top:8px">14 quarters of data<br/>App-based delivery</div>
+          <div style="margin-top:14px;font-size:22px;font-weight:700;color:var(--red)">−53%</div>
+          <div style="font-size:12px;color:var(--muted)">tip collapse after wage law</div>
+        </div>
+      </div>
+      <p style="margin-top:20px;font-size:14px;color:var(--muted);text-align:center">
+        ADK agents write SQL → FastMCP executes against DuckDB → answers from rows, not model weights
+      </p>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 8: DEMO SCRIPT ═══ -->
+  <div class="slide" id="s8">
+    <div style="width:100%;max-width:960px">
+      <div class="tag">Demo Script</div>
+      <h2>Ask these. The data <span class="accent">answers back.</span></h2>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:24px">
+        <div class="demo-q">
+          <span class="icon">🤖</span>
+          <div>
+            <div>"<em>Which NYC agencies use the most AI tools?</em>"</div>
+            <div class="demo-followup">→ follow-up: "How many of these tools have unknown vendors?"</div>
+          </div>
+        </div>
+        <div class="demo-q">
+          <span class="icon">🏠</span>
+          <div>
+            <div>"<em>Which NYC boroughs have the lowest mortgage approval rates?</em>"</div>
+            <div class="demo-followup">→ follow-up: "What are the top reasons mortgages get denied?"</div>
+          </div>
+        </div>
+        <div class="demo-q">
+          <span class="icon">🛵</span>
+          <div>
+            <div>"<em>How has delivery worker pay changed since NYC passed the minimum wage law?</em>"</div>
+            <div class="demo-followup">→ follow-up: "What happened to tips after the wage law?"</div>
+          </div>
+        </div>
+        <div class="demo-q" style="border-color:rgba(0,227,253,0.3)">
+          <span class="icon" style="color:var(--cyan)">📍</span>
+          <div>
+            <div>"<em>What's the situation in Bushwick right now?</em>"</div>
+            <div class="demo-followup" style="color:var(--cyan)">→ map auto-pans, 311 + crime + restaurant data loads</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SLIDE 9: CLOSING ═══ -->
+  <div class="slide" id="s9">
+    <div class="logo-pulse">🏙️</div>
+    <div class="tag">City Pulse — Build With AI 2026</div>
+    <h1 style="text-align:center">The city has the data.<br/><span class="accent">Now you can ask it.</span></h1>
+    <div style="display:flex;gap:16px;margin-top:36px;flex-wrap:wrap;justify-content:center">
+      <div class="glogo"><div class="dot dot-blue"></div> Gemini Live</div>
+      <div class="glogo"><div class="dot dot-red"></div> Google ADK</div>
+      <div class="glogo"><div class="dot dot-yellow"></div> MCP Protocol</div>
+      <div class="glogo"><div class="dot dot-green"></div> Cloud Run</div>
+    </div>
+    <div style="margin-top:28px;font-family:'Roboto Mono',monospace;font-size:14px;color:var(--muted)">
+      city-pulse-551379536248.us-central1.run.app
+    </div>
+  </div>
+
+</div><!-- /deck -->
+
+<div class="nav">
+  <button onclick="go(-1)">← Prev</button>
+  <span class="slide-num" id="slidenum">1 / 10</span>
+  <button onclick="go(1)">Next →</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  let cur = 0;
+
+  function show(n) {
+    slides[cur].classList.remove('active');
+    cur = Math.max(0, Math.min(slides.length - 1, n));
+    slides[cur].classList.add('active');
+    document.getElementById('slidenum').textContent = `${cur + 1} / ${slides.length}`;
+    document.getElementById('progress').style.width = `${((cur + 1) / slides.length) * 100}%`;
+  }
+
+  function go(dir) { show(cur + dir); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') go(1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp') go(-1);
+  });
+
+  show(0);
+</script>
+</body>
+</html>
