@@ -346,6 +346,7 @@
 
   let restaurantList = [];
   let currentLat = null, currentLng = null;
+  let voiceTranscriptShown = false;  // tracks whether we already typewrite'd Gemini's voice response
 
   // ── Google Maps ──────────────────────────────────────────────────────────
   let nycMap = null, placesService = null;
@@ -687,7 +688,9 @@
       } else if (msg.type === 'transcript') {
         if (msg.text) {
           setStatus('processing');
-          // Only check for bye — agent response handles the typewriter display
+          // Show Gemini's spoken response immediately — don't wait for agent
+          typewrite(msg.text);
+          voiceTranscriptShown = true;
           if (/\b(bye|goodbye|exit|stop listening|deactivate)\b/i.test(msg.text)) {
             setTimeout(() => endSession(), 1500);
           }
@@ -705,7 +708,9 @@
         currentLat = msg.lat; currentLng = msg.lng;
       } else if (msg.type === 'agent_response') {
         hideChartLoader();
-        if (msg.spoken) typewrite(msg.spoken);
+        // Only typewrite for demo button queries (text_query) — voice queries already
+        // showed Gemini's spoken response via the transcript handler above
+        if (msg.spoken && !voiceTranscriptShown) typewrite(msg.spoken);
         if (msg.chart) renderChart(msg.chart);
         // Update map based on intent
         if (msg.intent === 'lending') {
@@ -776,6 +781,7 @@
         if (speaking) {
           if (!userWasSpeaking) {
             ws.send(JSON.stringify({ type: 'audio_start' }));
+            voiceTranscriptShown = false;  // new turn starting
           }
           userWasSpeaking = true;
           clearTimeout(silenceTimer);
@@ -906,6 +912,7 @@
       setTimeout(() => { clearInterval(t); resolve(); }, 3000);
     });
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    voiceTranscriptShown = false;  // text query — show agent spoken text when it arrives
     ws.send(JSON.stringify({ type: 'text_query', text, intent_hint: intent }));
     showChartLoader();
     typewrite('Querying: ' + text);
