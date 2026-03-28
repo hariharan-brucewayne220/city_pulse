@@ -64,7 +64,7 @@ async def generate_story_card(spoken: str, intent: str = "general") -> dict | No
     if not prompt:
         return None
     try:
-        return await asyncio.wait_for(_generate(prompt), timeout=10.0)
+        return await asyncio.wait_for(_generate(prompt), timeout=20.0)
     except asyncio.TimeoutError:
         log.warning("story_card timed out")
         return None
@@ -76,7 +76,7 @@ async def generate_story_card(spoken: str, intent: str = "general") -> dict | No
 async def _generate(prompt: str) -> dict | None:
     client = _get_client()
     response = await client.aio.models.generate_content(
-        model="gemini-2.0-flash-exp",
+        model="gemini-2.5-flash-image",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE", "TEXT"],
